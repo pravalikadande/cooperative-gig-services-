@@ -23,8 +23,8 @@ const initialJobs: Job[] = [
   { id: "CGS-24058", customer: "Asha Verma", service: "Plumbing visit", schedule: "Today · 4:30 PM", address: "Road No. 12, Banjara Hills", amount: 299, status: "confirmed", note: "A slow kitchen tap leak. Customer has requested an arrival message." },
 ];
 
-export function WorkerOperations({ user, onSaveProfile, onSignOut }: { user: AppUser; onSaveProfile: (input: { name?: string; phone?: string; workerProfile?: Record<string, unknown> }) => Promise<void>; onSignOut: () => Promise<void> }) {
-  const name = user.name;
+export function WorkerOperations({ user, name: legacyName, onSaveProfile, onSignOut }: { user?: AppUser; name?: string; onSaveProfile: (input: { name?: string; phone?: string; address?: string; workerProfile?: Record<string, unknown> }) => Promise<void>; onSignOut: () => Promise<void> }) {
+  const name = user?.name ?? legacyName ?? "Worker";
   const [view, setView] = useState<WorkerView>("dashboard");
   const [isOnline, setIsOnline] = useState(true);
   const [liveBookings, setLiveBookings] = useState<Booking[] | null>(null);
@@ -66,12 +66,13 @@ export function WorkerOperations({ user, onSaveProfile, onSignOut }: { user: App
     }
   };
   useEffect(() => {
+    if (!user?.id) return undefined;
     try {
       return subscribeToBookings(user.id, "worker", setLiveBookings);
     } catch {
       return undefined;
     }
-  }, [user.id]);
+  }, [user?.id]);
   const liveJobs = liveBookings?.map(bookingToJob);
   const requests = liveJobs ?? initialRequests;
   const jobs = liveJobs ?? initialJobs;
@@ -184,7 +185,7 @@ function PrimaryButton({ label, icon, onPress }: { label: string; icon: keyof ty
 function SecondaryButton({ label, icon, onPress, danger }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; onPress: () => void; danger?: boolean }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.secondaryButton, danger && styles.secondaryDanger, pressed && styles.pressed]}><MaterialIcons name={icon} size={18} color={danger ? "#C2410C" : "#0F766E"} /><Text style={[styles.secondaryText, danger && styles.secondaryDangerText]}>{label}</Text></Pressable>; }
 function Status({ status }: { status: string }) { const value = status.toLowerCase(); const color = value === "completed" || value === "verified" ? "#15803D" : value === "pending" || value === "in review" ? "#D97706" : value === "rejected" ? "#C2410C" : "#0F766E"; const label = value.includes("_") ? bookingStatusLabel(value as BookingStatus) : status; return <View style={[styles.status, { backgroundColor: `${color}16` }]}><Text style={[styles.statusText, { color }]}>{label}</Text></View>; }
 function EmptyState({ icon, title, copy }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; copy: string }) { return <View style={styles.empty}><View style={styles.emptyIcon}><MaterialIcons name={icon} size={28} color="#0F766E" /></View><Text style={styles.emptyTitle}>{title}</Text><Text style={styles.emptyCopy}>{copy}</Text></View>; }
-function bookingToJob(booking: Booking): Job { return { id: booking.id, customer: booking.customerName || "Customer", service: booking.serviceName, schedule: `${booking.date} · ${booking.time}`, address: booking.location.address, amount: booking.price, status: booking.status, note: booking.description || "No additional work description was provided." }; }
+function bookingToJob(booking: Booking): Job { const customerName = (booking as Booking & { customerName?: unknown }).customerName; return { id: booking.id, customer: typeof customerName === "string" && customerName.trim() ? customerName : "Customer", service: booking.serviceName, schedule: `${booking.date} · ${booking.time}`, address: booking.location.address, amount: booking.price, status: booking.status, note: booking.description || "No additional work description was provided." }; }
 function SettingsRow({ icon, label, onPress }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; onPress: () => void }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.settings, pressed && styles.pressed]}><MaterialIcons name={icon} size={20} color="#0F766E" /><Text style={styles.settingsLabel}>{label}</Text><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable>; }
 function Activity({ icon, title, time }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; time: string }) { return <View style={styles.activity}><View style={styles.activityIcon}><MaterialIcons name={icon} size={18} color="#0F766E" /></View><View style={styles.flex}><Text style={styles.activityTitle}>{title}</Text><Text style={styles.activityTime}>{time}</Text></View></View>; }
 async function openPrivateCall() { const phone = "9000000000"; const url = `tel:${phone}`; const supported = await Linking.canOpenURL(url); if (!supported) { Alert.alert("Calling unavailable", "A compatible phone application is not available on this device."); return; } await Linking.openURL(url); }
