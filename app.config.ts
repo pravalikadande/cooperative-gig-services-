@@ -94,6 +94,10 @@ const config: ExpoConfig = {
     favicon: "./assets/images/favicon.png",
   },
   extra: {
+        eas: {
+      projectId: "6d4f398f-ed3c-4b30-8c52-7b2d8bd055d6",
+    },
+
     firebase: {
       apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? "",
       authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "",
