@@ -1,0 +1,35 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function booking(bookingId) {
+      return firestore.get(/databases/(default)/documents/bookings/$(bookingId));
+    }
+
+    function isBookingParticipant(bookingId) {
+      return signedIn() && (
+        booking(bookingId).data.customerId == request.auth.uid ||
+        booking(bookingId).data.workerId == request.auth.uid
+      );
+    }
+
+    function validImage() {
+      return request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+
+    match /profileImages/{userId}/{fileName} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == userId && validImage();
+    }
+
+    match /bookingImages/{bookingId}/{fileName} {
+      allow read: if isBookingParticipant(bookingId);
+      allow write: if isBookingParticipant(bookingId) && validImage();
+    }
+  }
+}
