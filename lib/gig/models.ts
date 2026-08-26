@@ -65,8 +65,12 @@ export type Booking = {
   id: string;
   customerId: string;
   customerName?: string;
+  /** Private participant contact snapshot; booking access is restricted to its participants. */
+  customerPhone?: string;
   workerId: string;
   workerName?: string;
+  /** Private participant contact snapshot; booking access is restricted to its participants. */
+  workerPhone?: string;
   serviceId: string;
   serviceName: string;
   date: string;
