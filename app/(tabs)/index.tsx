@@ -17,7 +17,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { CustomerMarketplace } from "@/components/gig/customer-marketplace";
 import { AdminOperations, WorkerOperations } from "@/components/gig/operations";
 import { useGigSession } from "@/lib/gig/session-context";
-import type { UserRole } from "@/lib/gig/models";
+import type { AppUser, UserRole } from "@/lib/gig/models";
 import { PUBLIC_REGISTRATION_ROLES } from "@/lib/gig/registration";
 
 type AuthMode = "welcome" | "login" | "register";
@@ -53,7 +53,7 @@ export default function HomeScreen() {
   };
 
   if (isLoading) return <Splash />;
-  if (user) return <SignedInShell name={user.name} role={user.role} onSaveProfile={updateProfile} onSignOut={signOut} />;
+  if (user) return <SignedInShell user={user} onSaveProfile={updateProfile} onSignOut={signOut} />;
 
   if (mode === "welcome") {
     return (
@@ -137,10 +137,10 @@ function Splash() {
   );
 }
 
-function SignedInShell({ name, role, onSaveProfile, onSignOut }: { name: string; role: UserRole; onSaveProfile: (input: { name?: string; phone?: string; address?: string; workerProfile?: Record<string, unknown> }) => Promise<void>; onSignOut: () => Promise<void> }) {
-  if (role === "customer") return <CustomerMarketplace name={name} onSaveProfile={onSaveProfile} onSignOut={onSignOut} />;
-  if (role === "worker") return <WorkerOperations name={name} onSaveProfile={onSaveProfile} onSignOut={onSignOut} />;
-  return <AdminOperations name={name} onSignOut={onSignOut} />;
+function SignedInShell({ user, onSaveProfile, onSignOut }: { user: AppUser; onSaveProfile: (input: { name?: string; phone?: string; address?: string; workerProfile?: Record<string, unknown> }) => Promise<void>; onSignOut: () => Promise<void> }) {
+  if (user.role === "customer") return <CustomerMarketplace user={user} onSaveProfile={onSaveProfile} onSignOut={onSignOut} />;
+  if (user.role === "worker") return <WorkerOperations user={user} onSaveProfile={onSaveProfile} onSignOut={onSignOut} />;
+  return <AdminOperations name={user.name} onSignOut={onSignOut} />;
 }
 
 function BrandMark({ size }: { size: "tiny" | "small" | "large" }) {

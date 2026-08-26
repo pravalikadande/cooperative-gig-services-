@@ -64,7 +64,9 @@ export type BookingLocation = Coordinate & {
 export type Booking = {
   id: string;
   customerId: string;
+  customerName?: string;
   workerId: string;
+  workerName?: string;
   serviceId: string;
   serviceName: string;
   date: string;

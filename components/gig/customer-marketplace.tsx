@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { isBookingContactEligible, bookingStatusLabel, canLeaveReview } from "@/lib/gig/booking-lifecycle";
-import { subscribeToWorkerDirectory } from "@/lib/gig/firebase-repository";
+import { createBooking, subscribeToBookings, subscribeToWorkerDirectory } from "@/lib/gig/firebase-repository";
 import { requestCurrentServiceLocation } from "@/lib/gig/location";
-import type { BookingStatus, ServiceCategory, WorkerProfile } from "@/lib/gig/models";
+import type { AppUser, Booking, BookingStatus, ServiceCategory, WorkerProfile } from "@/lib/gig/models";
 import { ServiceMap } from "@/components/gig/service-map";
 
 type CustomerView = "home" | "explore" | "worker" | "booking" | "confirmation" | "bookings" | "review" | "profile";
@@ -42,7 +42,8 @@ const seedBookings = [
   { id: "CGS-23901", worker: "Salma Begum", service: "Cleaner", date: "12 Aug", time: "10:00 AM", status: "completed" as BookingStatus, price: 699 },
 ];
 
-export function CustomerMarketplace({ name, onSaveProfile, onSignOut }: { name: string; onSaveProfile: (input: { name?: string; phone?: string; address?: string }) => Promise<void>; onSignOut: () => Promise<void> }) {
+export function CustomerMarketplace({ user, onSaveProfile, onSignOut }: { user: AppUser; onSaveProfile: (input: { name?: string; phone?: string; address?: string }) => Promise<void>; onSignOut: () => Promise<void> }) {
+  const name = user.name;
   const [view, setView] = useState<CustomerView>("home");
   const [localHour, setLocalHour] = useState(() => new Date().getHours());
   const [query, setQuery] = useState("");
@@ -57,6 +58,8 @@ export function CustomerMarketplace({ name, onSaveProfile, onSignOut }: { name: 
   const [bookingImageUri, setBookingImageUri] = useState<string | null>(null);
   const [activeWorkerFilter, setActiveWorkerFilter] = useState<WorkerFilter>("All");
   const [liveWorkers, setLiveWorkers] = useState<WorkerProfile[] | null>(null);
+  const [liveBookings, setLiveBookings] = useState<Booking[] | null>(null);
+  const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfileDraft>({ name, phone: "", address: "Madhapur, Hyderabad", notificationsEnabled: true });
   const directoryWorkers = useMemo(() => {
     if (!liveWorkers?.length) return workers;
@@ -121,6 +124,14 @@ export function CustomerMarketplace({ name, onSaveProfile, onSignOut }: { name: 
     }
   }, []);
 
+  useEffect(() => {
+    try {
+      return subscribeToBookings(user.id, "customer", setLiveBookings);
+    } catch {
+      return undefined;
+    }
+  }, [user.id]);
+
   const timeGreeting = localHour < 12 ? "Good morning" : localHour < 17 ? "Good afternoon" : "Good evening";
 
   const openWorker = (worker: WorkerProfile) => {
@@ -130,10 +141,30 @@ export function CustomerMarketplace({ name, onSaveProfile, onSignOut }: { name: 
     setView("worker");
   };
 
-  const confirmBooking = () => {
-    const id = `CGS-${Math.floor(10000 + Math.random() * 89999)}`;
-    setCreatedBooking({ id, status: "pending", date: "Tomorrow", time: "11:00 AM" });
-    setView("confirmation");
+  const confirmBooking = async () => {
+    if (isBookingSubmitting) return;
+    setIsBookingSubmitting(true);
+    try {
+      const id = await createBooking({
+        customerId: user.id,
+        customerName: user.name,
+        workerId: selectedWorker.userId,
+        workerName: selectedWorker.name,
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        date: "Tomorrow",
+        time: "11:00 AM",
+        location: { latitude: serviceLocation.latitude, longitude: serviceLocation.longitude, address: serviceLocation.label },
+        description: draftDescription.trim(),
+        price: selectedService.startingPrice,
+      });
+      setCreatedBooking({ id, status: "pending", date: "Tomorrow", time: "11:00 AM" });
+      setView("confirmation");
+    } catch (error) {
+      Alert.alert("Booking not sent", error instanceof Error ? error.message : "We could not create this booking. Please try again.");
+    } finally {
+      setIsBookingSubmitting(false);
+    }
   };
 
   const openTab = (next: CustomerView) => setView(next);
@@ -164,9 +195,9 @@ export function CustomerMarketplace({ name, onSaveProfile, onSignOut }: { name: 
         {view === "home" && <HomeView greeting={timeGreeting} name={customerProfile.name || name} selectedService={selectedService} setSelectedService={setSelectedService} workers={directoryWorkers} onExplore={() => setView("explore")} onWorker={openWorker} />}
         {view === "explore" && <ExploreView query={query} setQuery={setQuery} activeFilter={activeWorkerFilter} setActiveFilter={setActiveWorkerFilter} workers={filteredWorkers} onWorker={openWorker} />}
         {view === "worker" && <WorkerView worker={selectedWorker} onBack={() => setView("explore")} onBook={() => setView("booking")} />}
-        {view === "booking" && <BookingView worker={selectedWorker} service={selectedService} description={draftDescription} setDescription={setDraftDescription} serviceLocation={serviceLocation} onUseCurrentLocation={useCurrentLocation} bookingImageUri={bookingImageUri} onChooseImage={chooseBookingImage} onBack={() => setView("worker")} onConfirm={confirmBooking} />}
+        {view === "booking" && <BookingView worker={selectedWorker} service={selectedService} description={draftDescription} setDescription={setDraftDescription} serviceLocation={serviceLocation} onUseCurrentLocation={useCurrentLocation} bookingImageUri={bookingImageUri} onChooseImage={chooseBookingImage} onBack={() => setView("worker")} onConfirm={() => { void confirmBooking(); }} isSubmitting={isBookingSubmitting} />}
         {view === "confirmation" && createdBooking && <ConfirmationView booking={createdBooking} worker={selectedWorker} service={selectedService} onBookings={() => setView("bookings")} />}
-        {view === "bookings" && <BookingsView createdBooking={createdBooking} selectedWorker={selectedWorker} selectedService={selectedService} availableWorkers={directoryWorkers} onWorker={openWorker} hasReviewed={hasReviewed} onReview={() => setView("review")} />}
+        {view === "bookings" && <BookingsView createdBooking={createdBooking} liveBookings={liveBookings} selectedWorker={selectedWorker} selectedService={selectedService} availableWorkers={directoryWorkers} onWorker={openWorker} hasReviewed={hasReviewed} onReview={() => setView("review")} />}
         {view === "review" && <ReviewView onBack={() => setView("bookings")} onSubmit={() => { setHasReviewed(true); setView("bookings"); }} />}
         {view === "profile" && <ProfileView profile={customerProfile} onProfileChange={setCustomerProfile} onSave={saveCustomerProfile} onSignOut={onSignOut} />}
       </ScrollView>
@@ -198,8 +229,8 @@ function WorkerView({ worker, onBack, onBook }: { worker: WorkerProfile; onBack:
   return <><BackLabel label="Worker profile" onPress={onBack} /><View style={styles.profileHero}><View style={styles.avatarLarge}><Text style={styles.avatarText}>{initials(worker.name)}</Text></View><View style={styles.flex}><View style={styles.nameLine}><Text style={styles.profileName}>{worker.name}</Text>{worker.isVerified && <MaterialIcons name="verified" size={19} color="#0F766E" />}</View><Text style={styles.profileRole}>{worker.services.join(" · ")}</Text><View style={styles.ratingLine}><MaterialIcons name="star" size={17} color="#D97706" /><Text style={styles.ratingText}>{worker.rating} · {worker.reviewCount} reviews</Text><View style={[styles.dot, { backgroundColor: worker.isOnline ? "#15803D" : "#94A3B8" }]} /><Text style={styles.onlineText}>{worker.isOnline ? "Online" : "Offline"}</Text></View></View></View><InfoRow icon="work-outline" label={`${worker.experienceYears} years of experience`} /><InfoRow icon="location-on" label={worker.serviceArea} /><InfoRow icon="schedule" label={worker.availability} /><View style={styles.divider} /><Text style={styles.sectionTitle}>About {worker.name.split(" ")[0]}</Text><Text style={styles.bodyText}>{worker.about}</Text><Text style={styles.sectionTitle}>Skills & services</Text><View style={styles.skillWrap}>{worker.skills.map((skill) => <View style={styles.skillChip} key={skill}><Text style={styles.skillText}>{skill}</Text></View>)}</View><View style={styles.priceBanner}><View><Text style={styles.priceCaption}>STARTING FROM</Text><Text style={styles.price}>₹{worker.startingPrice}</Text></View><Text style={styles.priceNote}>Final price depends on the job.</Text></View><View style={styles.actionStack}><PrimaryButton label="Book service" icon="calendar-month" onPress={onBook} /><View style={styles.dualAction}><DisabledAction label="Message" icon="chat-bubble-outline" disabled={!contactAvailable} /><DisabledAction label="Call" icon="call" disabled={!contactAvailable} /></View><Text style={styles.guardText}>Message and call unlock after the worker accepts a valid booking.</Text></View></>;
 }
 
-function BookingView({ worker, service, description, setDescription, serviceLocation, onUseCurrentLocation, bookingImageUri, onChooseImage, onBack, onConfirm }: { worker: WorkerProfile; service: ServiceCategory; description: string; setDescription: (value: string) => void; serviceLocation: { latitude: number; longitude: number; label: string }; onUseCurrentLocation: () => void; bookingImageUri: string | null; onChooseImage: () => void; onBack: () => void; onConfirm: () => void }) {
-  return <><BackLabel label="Book a service" onPress={onBack} /><View style={styles.bookingWorker}><View style={styles.avatarMedium}><Text style={styles.avatarText}>{initials(worker.name)}</Text></View><View><Text style={styles.bookingWorkerHeaderName}>{worker.name}</Text><Text style={styles.bookingWorkerInfo}>{service.name} · starts at ₹{service.startingPrice}</Text></View></View><Text style={styles.fieldHeading}>Your service details</Text><SelectRow icon="build" label="Service" value={service.name} /><SelectRow icon="calendar-today" label="Date" value="Tomorrow, 19 July" /><SelectRow icon="schedule" label="Time" value="11:00 AM" /><SelectRow icon="location-on" label="Location" value={serviceLocation.label} onPress={onUseCurrentLocation} /><ServiceMap latitude={serviceLocation.latitude} longitude={serviceLocation.longitude} label={serviceLocation.label} /><View style={styles.descriptionCard}><Text style={styles.fieldLabel}>Describe the work</Text><TextInput multiline value={description} onChangeText={setDescription} placeholder="For example: kitchen sink leaking below the drain." placeholderTextColor="#829AB1" style={styles.descriptionInput} /><Pressable onPress={onChooseImage} style={({ pressed }) => [styles.photoRow, pressed && styles.pressed]}><MaterialIcons name="add-a-photo" size={18} color="#0F766E" /><Text style={styles.photoText}>{bookingImageUri ? "Photo selected · change photo" : "Add a photo (optional)"}</Text></Pressable>{bookingImageUri && <Image source={{ uri: bookingImageUri }} style={styles.bookingPhotoPreview} />}</View><View style={styles.estimateCard}><View><Text style={styles.estimateLabel}>ESTIMATED STARTING PRICE</Text><Text style={styles.estimatePrice}>₹{service.startingPrice}</Text></View><Text style={styles.estimateNote}>You will confirm the final price with the worker.</Text></View><PrimaryButton label="Confirm booking" icon="check-circle-outline" onPress={onConfirm} /></>;
+function BookingView({ worker, service, description, setDescription, serviceLocation, onUseCurrentLocation, bookingImageUri, onChooseImage, onBack, onConfirm, isSubmitting }: { worker: WorkerProfile; service: ServiceCategory; description: string; setDescription: (value: string) => void; serviceLocation: { latitude: number; longitude: number; label: string }; onUseCurrentLocation: () => void; bookingImageUri: string | null; onChooseImage: () => void; onBack: () => void; onConfirm: () => void; isSubmitting: boolean }) {
+  return <><BackLabel label="Book a service" onPress={onBack} /><View style={styles.bookingWorker}><View style={styles.avatarMedium}><Text style={styles.avatarText}>{initials(worker.name)}</Text></View><View><Text style={styles.bookingWorkerHeaderName}>{worker.name}</Text><Text style={styles.bookingWorkerInfo}>{service.name} · starts at ₹{service.startingPrice}</Text></View></View><Text style={styles.fieldHeading}>Your service details</Text><SelectRow icon="build" label="Service" value={service.name} /><SelectRow icon="calendar-today" label="Date" value="Tomorrow, 19 July" /><SelectRow icon="schedule" label="Time" value="11:00 AM" /><SelectRow icon="location-on" label="Location" value={serviceLocation.label} onPress={onUseCurrentLocation} /><ServiceMap latitude={serviceLocation.latitude} longitude={serviceLocation.longitude} label={serviceLocation.label} /><View style={styles.descriptionCard}><Text style={styles.fieldLabel}>Describe the work</Text><TextInput multiline value={description} onChangeText={setDescription} placeholder="For example: kitchen sink leaking below the drain." placeholderTextColor="#829AB1" style={styles.descriptionInput} /><Pressable onPress={onChooseImage} style={({ pressed }) => [styles.photoRow, pressed && styles.pressed]}><MaterialIcons name="add-a-photo" size={18} color="#0F766E" /><Text style={styles.photoText}>{bookingImageUri ? "Photo selected · change photo" : "Add a photo (optional)"}</Text></Pressable>{bookingImageUri && <Image source={{ uri: bookingImageUri }} style={styles.bookingPhotoPreview} />}</View><View style={styles.estimateCard}><View><Text style={styles.estimateLabel}>ESTIMATED STARTING PRICE</Text><Text style={styles.estimatePrice}>₹{service.startingPrice}</Text></View><Text style={styles.estimateNote}>You will confirm the final price with the worker.</Text></View><PrimaryButton label={isSubmitting ? "Sending booking…" : "Confirm booking"} icon="check-circle-outline" onPress={onConfirm} disabled={isSubmitting} /></>;
 }
 
 function ConfirmationView({ booking, worker, service, onBookings }: { booking: { id: string; status: BookingStatus; date: string; time: string }; worker: WorkerProfile; service: ServiceCategory; onBookings: () => void }) {
@@ -207,10 +238,11 @@ function ConfirmationView({ booking, worker, service, onBookings }: { booking: {
   return <View style={styles.confirmation}><View style={styles.successIcon}><MaterialIcons name="calendar-month" size={34} color="#15803D" /></View><Text style={styles.confirmTitle}>Booking requested</Text><Text style={styles.confirmCopy}>Your request has been sent to {worker.name.split(" ")[0]}. We will notify you as soon as they respond.</Text><View style={styles.confirmDetailCard}><DetailRow label="Booking ID" value={booking.id} /><DetailRow label="Service" value={service.name} /><DetailRow label="Worker" value={worker.name} /><DetailRow label="Schedule" value={`${booking.date} · ${booking.time}`} /><DetailRow label="Status" value={bookingStatusLabel(booking.status)} emphasis /></View><View style={styles.dualAction}><DisabledAction label="Message worker" icon="chat-bubble-outline" disabled={!contactAvailable} /><DisabledAction label="Call worker" icon="call" disabled={!contactAvailable} /></View><Text style={styles.guardText}>Contact options become available after this booking is accepted.</Text><PrimaryButton label="View my bookings" icon="event-note" onPress={onBookings} /></View>;
 }
 
-function BookingsView({ createdBooking, selectedWorker, selectedService, availableWorkers, onWorker, hasReviewed, onReview }: { createdBooking: { id: string; status: BookingStatus; date: string; time: string } | null; selectedWorker: WorkerProfile; selectedService: ServiceCategory; availableWorkers: WorkerProfile[]; onWorker: (worker: WorkerProfile) => void; hasReviewed: boolean; onReview: () => void }) {
+function BookingsView({ createdBooking, liveBookings, selectedWorker, selectedService, availableWorkers, onWorker, hasReviewed, onReview }: { createdBooking: { id: string; status: BookingStatus; date: string; time: string } | null; liveBookings: Booking[] | null; selectedWorker: WorkerProfile; selectedService: ServiceCategory; availableWorkers: WorkerProfile[]; onWorker: (worker: WorkerProfile) => void; hasReviewed: boolean; onReview: () => void }) {
   type BookingTab = "Upcoming" | "Active" | "Completed" | "Cancelled";
   const [activeTab, setActiveTab] = useState<BookingTab>("Upcoming");
-  const bookings = createdBooking ? [{ id: createdBooking.id, worker: selectedWorker.name, service: selectedService.name, date: `${createdBooking.date} · ${createdBooking.time}`, status: createdBooking.status, price: selectedService.startingPrice }, ...seedBookings] : seedBookings;
+  const persistedBookings = liveBookings?.map((booking) => ({ id: booking.id, worker: booking.workerName || selectedWorker.name, service: booking.serviceName, date: `${booking.date} · ${booking.time}`, status: booking.status, price: booking.price }));
+  const bookings = persistedBookings ?? (createdBooking ? [{ id: createdBooking.id, worker: selectedWorker.name, service: selectedService.name, date: `${createdBooking.date} · ${createdBooking.time}`, status: createdBooking.status, price: selectedService.startingPrice }, ...seedBookings] : seedBookings);
   const tabStatuses: Record<BookingTab, BookingStatus[]> = { Upcoming: ["pending", "confirmed"], Active: ["accepted", "in_progress"], Completed: ["completed"], Cancelled: ["cancelled", "rejected"] };
   const visibleBookings = bookings.filter((booking) => tabStatuses[activeTab].includes(booking.status));
   return <><View style={styles.screenIntro}><Text style={styles.title}>My bookings</Text><Text style={styles.subtle}>Follow each service from request to completion.</Text></View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>{(["Upcoming", "Active", "Completed", "Cancelled"] as BookingTab[]).map((tab) => { const selected = activeTab === tab; return <TouchableOpacity accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={`Show ${tab.toLowerCase()} bookings`} activeOpacity={0.72} key={tab} onPress={() => setActiveTab(tab)} style={[styles.filterChip, selected && styles.filterChipActive]}><Text style={[styles.filterText, selected && styles.filterTextActive]}>{tab}</Text></TouchableOpacity>; })}</ScrollView>{visibleBookings.length === 0 ? <View style={styles.emptyWorkers}><MaterialIcons name="event-busy" size={28} color="#0F766E" /><Text style={styles.emptyWorkersTitle}>No {activeTab.toLowerCase()} bookings</Text><Text style={styles.emptyWorkersCopy}>Bookings will appear here when their status changes.</Text></View> : <View style={styles.bookingList}>{visibleBookings.map((booking) => <View key={booking.id} style={styles.bookingListCard}><Pressable onPress={() => onWorker(availableWorkers.find((worker) => worker.name === booking.worker) ?? availableWorkers[0])} style={({ pressed }) => [styles.bookingCardPress, pressed && styles.pressed]}><View style={styles.bookingListTop}><Text style={styles.bookingService}>{booking.service}</Text><StatusPill status={booking.status} /></View><Text style={styles.bookingWorkerName}>{booking.worker}</Text><Text style={styles.bookingSchedule}>{booking.date}</Text><View style={styles.bookingListFoot}><Text style={styles.bookingId}>{booking.id}</Text><Text style={styles.bookingCost}>from ₹{booking.price}</Text></View></Pressable>{canLeaveReview(booking.status, hasReviewed) && <Pressable onPress={onReview} style={({ pressed }) => [styles.rateButton, pressed && styles.pressed]}><MaterialIcons name="star-outline" size={18} color="#D97706" /><Text style={styles.rateButtonText}>Rate this service</Text></Pressable>}{booking.status === "completed" && hasReviewed && <Text style={styles.ratedText}>Your review has been submitted. Thank you.</Text>}</View>)}</View>}</>;
@@ -239,7 +271,7 @@ function WorkerCard({ worker, onPress }: { worker: WorkerProfile; onPress: () =>
 function BottomNav({ active, onPress }: { active: string; onPress: (view: CustomerView) => void }) { const tabs: { label: string; view: CustomerView; icon: keyof typeof MaterialIcons.glyphMap }[] = [{ label: "Home", view: "home", icon: "home-filled" }, { label: "Explore", view: "explore", icon: "search" }, { label: "Bookings", view: "bookings", icon: "event-note" }, { label: "Profile", view: "profile", icon: "person" }]; return <View style={styles.bottomNav}>{tabs.map((tab) => { const isActive = active === tab.label; return <Pressable key={tab.label} onPress={() => onPress(tab.view)} style={({ pressed }) => [styles.navTab, pressed && styles.pressed]}><MaterialIcons name={tab.icon} size={22} color={isActive ? "#0F766E" : "#627D98"} /><Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{tab.label}</Text></Pressable>; })}</View>; }
 function SectionHeader({ title, action, onPress }: { title: string; action?: string; onPress?: () => void }) { return <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{title}</Text>{action && <Pressable onPress={onPress} style={({ pressed }) => [styles.sectionAction, pressed && styles.pressed]}><Text style={styles.sectionActionText}>{action}</Text><MaterialIcons name="chevron-right" size={18} color="#0F766E" /></Pressable>}</View>; }
 function BackLabel({ label, onPress }: { label: string; onPress: () => void }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.backLabel, pressed && styles.pressed]}><MaterialIcons name="arrow-back" size={21} color="#102A43" /><Text style={styles.backLabelText}>{label}</Text></Pressable>; }
-function PrimaryButton({ label, icon, onPress }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; onPress: () => void }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryPressed]}><Text style={styles.primaryText}>{label}</Text><MaterialIcons name={icon} size={20} color="#FFFFFF" /></Pressable>; }
+function PrimaryButton({ label, icon, onPress, disabled }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; onPress: () => void; disabled?: boolean }) { return <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.primaryButton, disabled && { opacity: 0.62 }, pressed && !disabled && styles.primaryPressed]}><Text style={styles.primaryText}>{label}</Text><MaterialIcons name={icon} size={20} color="#FFFFFF" /></Pressable>; }
 function DisabledAction({ label, icon, disabled }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; disabled: boolean }) { return <Pressable disabled={disabled} onPress={() => Alert.alert(label, "A valid active booking is required before contact is available.")} style={styles.disabledAction}><MaterialIcons name={icon} size={20} color="#94A3B8" /><Text style={styles.disabledText}>{label}</Text></Pressable>; }
 function SelectRow({ icon, label, value, onPress }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string; onPress?: () => void }) { return <Pressable onPress={onPress ?? (() => Alert.alert(label, "Selection controls will be connected to live availability in the Firebase-enabled release."))} style={({ pressed }) => [styles.selectRow, pressed && styles.pressed]}><View style={styles.selectIcon}><MaterialIcons name={icon} size={20} color="#0F766E" /></View><View style={styles.flex}><Text style={styles.selectLabel}>{label}</Text><Text style={styles.selectValue}>{value}</Text></View><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable>; }
 function InfoRow({ icon, label }: { icon: keyof typeof MaterialIcons.glyphMap; label: string }) { return <View style={styles.infoRow}><MaterialIcons name={icon} size={20} color="#0F766E" /><Text style={styles.infoText}>{label}</Text></View>; }

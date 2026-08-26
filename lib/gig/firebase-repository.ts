@@ -20,6 +20,7 @@ import { firestore, firebaseStorage } from "./firebase";
 import { isBookingContactEligible } from "./booking-lifecycle";
 import type { AppUser, Booking, BookingStatus, ChatMessage, Review, UserRole, WorkerProfile } from "./models";
 import { buildWorkerDirectoryProfile, workerProfileFirestorePayload, type WorkerProfileDraftInput } from "./worker-directory";
+import { bookingFirestorePayload, type BookingRequestInput } from "./booking-sync";
 
 export async function readFirebaseUser(firebaseUser: User): Promise<AppUser | null> {
   if (!firestore) return null;
@@ -171,7 +172,9 @@ function mapBooking(id: string, data: Record<string, unknown>): Booking {
   return {
     id,
     customerId: String(data.customerId),
+    customerName: typeof data.customerName === "string" ? data.customerName : undefined,
     workerId: String(data.workerId),
+    workerName: typeof data.workerName === "string" ? data.workerName : undefined,
     serviceId: String(data.serviceId),
     serviceName: String(data.serviceName),
     date: String(data.date),
@@ -186,11 +189,11 @@ function mapBooking(id: string, data: Record<string, unknown>): Booking {
   };
 }
 
-export async function createBooking(input: Omit<Booking, "id" | "status" | "createdAt" | "updatedAt">) {
+export async function createBooking(input: BookingRequestInput) {
   const database = requireFirestore();
   const bookingRef = doc(collection(database, "bookings"));
   await setDoc(bookingRef, {
-    ...input,
+    ...bookingFirestorePayload(input),
     bookingId: bookingRef.id,
     status: "pending",
     createdAt: serverTimestamp(),
@@ -209,8 +212,12 @@ export async function createBooking(input: Omit<Booking, "id" | "status" | "crea
 export function subscribeToBookings(userId: string, role: UserRole, onChange: (items: Booking[]) => void): Unsubscribe {
   const database = requireFirestore();
   const field = role === "worker" ? "workerId" : "customerId";
-  const bookingsQuery = query(collection(database, "bookings"), where(field, "==", userId), orderBy("updatedAt", "desc"));
-  return onSnapshot(bookingsQuery, (snapshot) => onChange(snapshot.docs.map((item) => mapBooking(item.id, item.data()))));
+  const bookingsQuery = query(collection(database, "bookings"), where(field, "==", userId));
+  return onSnapshot(bookingsQuery, (snapshot) => {
+    const items = snapshot.docs.map((item) => mapBooking(item.id, item.data()));
+    items.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    onChange(items);
+  });
 }
 
 export async function updateBookingStatus(bookingId: string, status: BookingStatus) {
