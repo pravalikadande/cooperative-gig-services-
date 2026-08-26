@@ -40,4 +40,13 @@ describe("worker directory profiles", () => {
     expect(payload).not.toHaveProperty("profileImage");
     expect(payload).not.toHaveProperty("location");
   });
+
+  it("uses a freshly fetched worker coordinate instead of an older saved location", () => {
+    const profile = buildWorkerDirectoryProfile(
+      { ...workerUser, location: { latitude: 17.38, longitude: 78.48 } },
+      { serviceArea: "Gachibowli, Hyderabad", location: { latitude: 17.44, longitude: 78.35 } },
+    );
+    expect(profile.serviceArea).toBe("Gachibowli, Hyderabad");
+    expect(profile.location).toEqual({ latitude: 17.44, longitude: 78.35 });
+  });
 });

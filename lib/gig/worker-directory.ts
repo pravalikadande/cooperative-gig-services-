@@ -14,6 +14,15 @@ function booleanValue(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function coordinateValue(value: unknown): Coordinate | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<Coordinate>;
+  return typeof candidate.latitude === "number" && Number.isFinite(candidate.latitude)
+    && typeof candidate.longitude === "number" && Number.isFinite(candidate.longitude)
+    ? { latitude: candidate.latitude, longitude: candidate.longitude }
+    : undefined;
+}
+
 export function toWorkerList(value: unknown, fallback: string[] = []) {
   const rawItems = Array.isArray(value)
     ? value
@@ -34,7 +43,7 @@ export function buildWorkerDirectoryProfile(
 ): WorkerProfile {
   const services = toWorkerList(draft?.services, existing?.services?.length ? existing.services : ["Local service"]);
   const skills = toWorkerList(draft?.skills, existing?.skills?.length ? existing.skills : services);
-  const location = user.location ?? existing?.location;
+  const location = coordinateValue(draft?.location) ?? user.location ?? existing?.location;
 
   return {
     id: user.id,

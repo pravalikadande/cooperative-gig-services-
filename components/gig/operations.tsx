@@ -1,10 +1,12 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as Linking from "expo-linking";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import { bookingStatusLabel, canLeaveReview, canTransitionBooking, isBookingContactEligible } from "@/lib/gig/booking-lifecycle";
-import type { BookingStatus } from "@/lib/gig/models";
+import { subscribeToBookings, updateBookingStatus } from "@/lib/gig/firebase-repository";
+import { requestCurrentServiceLocation } from "@/lib/gig/location";
+import type { AppUser, Booking, BookingStatus } from "@/lib/gig/models";
 
 type WorkerView = "dashboard" | "requests" | "jobs" | "earnings" | "profile" | "chat";
 type AdminView = "overview" | "workers" | "bookings" | "reports";
@@ -21,11 +23,11 @@ const initialJobs: Job[] = [
   { id: "CGS-24058", customer: "Asha Verma", service: "Plumbing visit", schedule: "Today · 4:30 PM", address: "Road No. 12, Banjara Hills", amount: 299, status: "confirmed", note: "A slow kitchen tap leak. Customer has requested an arrival message." },
 ];
 
-export function WorkerOperations({ name, onSaveProfile, onSignOut }: { name: string; onSaveProfile: (input: { name?: string; phone?: string; workerProfile?: Record<string, unknown> }) => Promise<void>; onSignOut: () => Promise<void> }) {
+export function WorkerOperations({ user, onSaveProfile, onSignOut }: { user: AppUser; onSaveProfile: (input: { name?: string; phone?: string; workerProfile?: Record<string, unknown> }) => Promise<void>; onSignOut: () => Promise<void> }) {
+  const name = user.name;
   const [view, setView] = useState<WorkerView>("dashboard");
   const [isOnline, setIsOnline] = useState(true);
-  const [requests, setRequests] = useState(initialRequests);
-  const [jobs, setJobs] = useState(initialJobs);
+  const [liveBookings, setLiveBookings] = useState<Booking[] | null>(null);
   const [earnings, setEarnings] = useState(1240);
   const [activeChat, setActiveChat] = useState<Job | null>(null);
   const [workerProfile, setWorkerProfile] = useState<WorkerProfileDraft>({ name, phone: "", services: "Plumber, Handyman", serviceArea: "Banjara Hills & nearby", availability: "Available today, 10:00 AM – 7:00 PM", about: "Experienced cooperative worker focused on transparent, dependable service." });
@@ -49,19 +51,48 @@ export function WorkerOperations({ name, onSaveProfile, onSignOut }: { name: str
       Alert.alert("Availability not updated", "We could not update your public worker availability. Please try again.");
     });
   };
+  const useCurrentServiceArea = async () => {
+    const result = await requestCurrentServiceLocation();
+    if (!result.ok) {
+      Alert.alert("Area not updated", result.message);
+      return;
+    }
+    setWorkerProfile((profile) => ({ ...profile, serviceArea: result.label }));
+    try {
+      await onSaveProfile({ workerProfile: { serviceArea: result.label, location: { latitude: result.latitude, longitude: result.longitude } } });
+      Alert.alert("Service area updated", `${result.label} is now shown on your public worker profile.`);
+    } catch (error) {
+      Alert.alert("Area not saved", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+  useEffect(() => {
+    try {
+      return subscribeToBookings(user.id, "worker", setLiveBookings);
+    } catch {
+      return undefined;
+    }
+  }, [user.id]);
+  const liveJobs = liveBookings?.map(bookingToJob);
+  const requests = liveJobs ?? initialRequests;
+  const jobs = liveJobs ?? initialJobs;
   const pending = requests.filter((job) => job.status === "pending");
   const activeJobs = jobs.filter((job) => ["accepted", "confirmed", "in_progress"].includes(job.status));
 
-  const accept = (request: Job) => {
+  const accept = async (request: Job) => {
     if (!canTransitionBooking(request.status, "accepted")) return;
-    setRequests((items) => items.map((item) => item.id === request.id ? { ...item, status: "accepted" } : item));
-    setJobs((items) => [{ ...request, status: "confirmed" }, ...items]);
-    Alert.alert("Request accepted", `${request.customer} has been notified. Contact is now available for this booking.`);
+    try {
+      await updateBookingStatus(request.id, "accepted");
+      Alert.alert("Request accepted", `${request.customer} has been notified. Confirm the schedule before starting the job.`);
+    } catch (error) {
+      Alert.alert("Request not updated", error instanceof Error ? error.message : "Please try again.");
+    }
   };
-  const reject = (request: Job) => { setRequests((items) => items.map((item) => item.id === request.id ? { ...item, status: "rejected" } : item)); Alert.alert("Request declined", "The customer will receive a respectful update."); };
-  const updateJob = (job: Job, next: BookingStatus) => {
+  const reject = async (request: Job) => {
+    try { await updateBookingStatus(request.id, "rejected"); Alert.alert("Request declined", "The customer will receive a respectful update."); } catch (error) { Alert.alert("Request not updated", error instanceof Error ? error.message : "Please try again."); }
+  };
+  const updateJob = async (job: Job, next: BookingStatus) => {
     if (!canTransitionBooking(job.status, next)) return;
-    setJobs((items) => items.map((item) => item.id === job.id ? { ...item, status: next } : item));
+    try { await updateBookingStatus(job.id, next); } catch (error) { Alert.alert("Job not updated", error instanceof Error ? error.message : "Please try again."); return; }
     if (next === "completed") setEarnings((value) => value + job.amount);
   };
   const selectedView = view === "chat" ? "jobs" : view;
@@ -71,9 +102,9 @@ export function WorkerOperations({ name, onSaveProfile, onSignOut }: { name: str
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
       {view === "dashboard" && <WorkerDashboard isOnline={isOnline} pending={pending.length} active={activeJobs.length} earnings={earnings} onRequests={() => setView("requests")} onJobs={() => setView("jobs")} onEarnings={() => setView("earnings")} />}
       {view === "requests" && <JobRequests items={pending} onAccept={accept} onReject={reject} />}
-      {view === "jobs" && <ActiveJobs items={activeJobs} onChat={(job) => { setActiveChat(job); setView("chat"); }} onStart={(job) => updateJob(job, "in_progress")} onComplete={(job) => updateJob(job, "completed")} />}
+      {view === "jobs" && <ActiveJobs items={activeJobs} onChat={(job) => { setActiveChat(job); setView("chat"); }} onConfirm={(job) => { void updateJob(job, "confirmed"); }} onStart={(job) => { void updateJob(job, "in_progress"); }} onComplete={(job) => { void updateJob(job, "completed"); }} />}
       {view === "earnings" && <Earnings today={earnings} />}
-      {view === "profile" && <WorkerProfile profile={workerProfile} onProfileChange={setWorkerProfile} onSave={saveWorkerProfile} onSignOut={onSignOut} />}
+      {view === "profile" && <WorkerProfile profile={workerProfile} onProfileChange={setWorkerProfile} onSave={saveWorkerProfile} onUseCurrentArea={useCurrentServiceArea} onSignOut={onSignOut} />}
       {view === "chat" && activeChat && <Conversation job={activeChat} onBack={() => setView("jobs")} />}
     </ScrollView>
     {view !== "chat" && <WorkerBottomNav active={selectedView} onPress={setView} />}
@@ -88,20 +119,39 @@ function JobRequests({ items, onAccept, onReject }: { items: Job[]; onAccept: (j
   return <><Intro title="Job requests" copy="Respond quickly to keep the customer updated." /><View style={styles.stack}>{items.length === 0 ? <EmptyState icon="inbox" title="You’re all caught up" copy="New requests will appear here while you are online." /> : items.map((job) => <View key={job.id} style={styles.jobCard}><JobHeader job={job} /><Text style={styles.jobNote}>{job.note}</Text><View style={styles.jobActions}><SecondaryButton label="Decline" icon="close" onPress={() => onReject(job)} danger /><PrimaryButton label="Accept" icon="check" onPress={() => onAccept(job)} /></View></View>)}</View></>;
 }
 
-function ActiveJobs({ items, onChat, onStart, onComplete }: { items: Job[]; onChat: (job: Job) => void; onStart: (job: Job) => void; onComplete: (job: Job) => void }) {
-  return <><Intro title="Active jobs" copy="Keep the status current so every customer knows what to expect." /><View style={styles.stack}>{items.length === 0 ? <EmptyState icon="work-outline" title="No active jobs" copy="Accepted bookings will appear here." /> : items.map((job) => <View key={job.id} style={styles.jobCard}><JobHeader job={job} /><Text style={styles.jobNote}>{job.note}</Text><View style={styles.contactRow}><SecondaryButton label="Message" icon="chat-bubble-outline" onPress={() => onChat(job)} /><SecondaryButton label="Call" icon="call" onPress={() => openPrivateCall()} /></View>{job.status === "confirmed" && <PrimaryButton label="Start job" icon="play-arrow" onPress={() => onStart(job)} />}{job.status === "in_progress" && <PrimaryButton label="Mark completed" icon="task-alt" onPress={() => onComplete(job)} />}</View>)}</View></>;
+function ActiveJobs({ items, onChat, onConfirm, onStart, onComplete }: { items: Job[]; onChat: (job: Job) => void; onConfirm: (job: Job) => void; onStart: (job: Job) => void; onComplete: (job: Job) => void }) {
+  return <><Intro title="Active jobs" copy="Keep the status current so every customer knows what to expect." /><View style={styles.stack}>{items.length === 0 ? <EmptyState icon="work-outline" title="No active jobs" copy="Accepted bookings will appear here." /> : items.map((job) => <View key={job.id} style={styles.jobCard}><JobHeader job={job} /><Text style={styles.jobNote}>{job.note}</Text><View style={styles.contactRow}><SecondaryButton label="Message" icon="chat-bubble-outline" onPress={() => onChat(job)} /><SecondaryButton label="Call" icon="call" onPress={() => openPrivateCall()} /></View>{job.status === "accepted" && <PrimaryButton label="Confirm booking" icon="event-available" onPress={() => onConfirm(job)} />}{job.status === "confirmed" && <PrimaryButton label="Start job" icon="play-arrow" onPress={() => onStart(job)} />}{job.status === "in_progress" && <PrimaryButton label="Mark completed" icon="task-alt" onPress={() => onComplete(job)} />}</View>)}</View></>;
 }
 
 function Earnings({ today }: { today: number }) { return <><Intro title="Earnings" copy="A clear record of the work you completed through the cooperative." /><View style={styles.earningsHero}><Text style={styles.earningsLabel}>TODAY’S EARNINGS</Text><Text style={styles.earningsValue}>₹{today.toLocaleString("en-IN")}</Text><Text style={styles.earningsCopy}>2 completed jobs · payouts processed weekly</Text></View><View style={styles.metricGrid}><Metric icon="calendar-view-week" label="This week" value="₹6,480" accent="#0F766E" /><Metric icon="calendar-month" label="This month" value="₹22,750" accent="#15803D" /><Metric icon="task-alt" label="Completed" value="42" accent="#D97706" /></View><Section title="Recent earnings" /><View style={styles.stack}>{[{ service: "Kitchen repair", customer: "Sana Khan", amount: "₹540", date: "Today" }, { service: "Bathroom fitting", customer: "Pradeep N.", amount: "₹700", date: "Yesterday" }, { service: "Pipe inspection", customer: "Isha Kapoor", amount: "₹420", date: "17 Jul" }].map((item) => <View style={styles.earningRow} key={`${item.service}-${item.date}`}><View style={styles.earningIcon}><MaterialIcons name="build" size={19} color="#0F766E" /></View><View style={styles.flex}><Text style={styles.earningTitle}>{item.service}</Text><Text style={styles.earningCopy}>{item.customer} · {item.date}</Text></View><Text style={styles.earningAmount}>{item.amount}</Text></View>)}</View></>;
 }
 
-function WorkerProfile({ profile, onProfileChange, onSave, onSignOut }: { profile: WorkerProfileDraft; onProfileChange: (profile: WorkerProfileDraft) => void; onSave: () => Promise<void>; onSignOut: () => Promise<void> }) {
+function WorkerProfile({ profile, onProfileChange, onSave, onUseCurrentArea, onSignOut }: { profile: WorkerProfileDraft; onProfileChange: (profile: WorkerProfileDraft) => void; onSave: () => Promise<void>; onUseCurrentArea: () => Promise<void>; onSignOut: () => Promise<void> }) {
   const [section, setSection] = useState<"menu" | "details" | "services" | "area" | "availability" | "preview">("menu");
   const update = (patch: Partial<WorkerProfileDraft>) => onProfileChange({ ...profile, ...patch });
+  const save = () => {
+    onSave().then(() => {
+      setSection("menu");
+      Alert.alert("Profile saved", "Your worker profile has been saved to your account.");
+    }).catch((error) => Alert.alert("Profile not saved", error instanceof Error ? error.message : "Please try again."));
+  };
+
   if (section !== "menu") {
     const title = section === "details" ? "Personal details" : section === "services" ? "Skills & services" : section === "area" ? "Service area" : section === "availability" ? "Availability" : "Public profile preview";
-    return <><Pressable onPress={() => setSection("menu")} style={({ pressed }) => [styles.backRow, pressed && styles.pressed]}><MaterialIcons name="arrow-back" size={21} color="#102A43" /><Text style={styles.backText}>Worker profile</Text></Pressable><View style={styles.workerForm}><Text style={styles.formTitle}>{title}</Text>{section === "details" && <><Text style={styles.formLabel}>Display name</Text><TextInput value={profile.name} onChangeText={(value) => update({ name: value })} placeholder="Your name" placeholderTextColor="#829AB1" style={styles.formInput} /><Text style={styles.formLabel}>Phone number</Text><TextInput value={profile.phone} onChangeText={(value) => update({ phone: value })} placeholder="10-digit mobile number" keyboardType="phone-pad" placeholderTextColor="#829AB1" style={styles.formInput} /><Text style={styles.formLabel}>About your work</Text><TextInput value={profile.about} onChangeText={(value) => update({ about: value })} placeholder="Describe your experience" placeholderTextColor="#829AB1" multiline style={styles.formTextArea} /></>}{section === "services" && <><Text style={styles.formCopy}>Use commas to list the services customers can book.</Text><Text style={styles.formLabel}>Skills & services</Text><TextInput value={profile.services} onChangeText={(value) => update({ services: value })} placeholder="Plumber, Handyman" placeholderTextColor="#829AB1" multiline style={styles.formTextArea} /></>}{section === "area" && <><Text style={styles.formCopy}>Customers see this service area while choosing nearby help.</Text><Text style={styles.formLabel}>Service area</Text><TextInput value={profile.serviceArea} onChangeText={(value) => update({ serviceArea: value })} placeholder="Area and city" placeholderTextColor="#829AB1" style={styles.formInput} /></>}{section === "availability" && <><Text style={styles.formCopy}>The Online switch on your dashboard controls immediate visibility.</Text><Text style={styles.formLabel}>Working hours</Text><TextInput value={profile.availability} onChangeText={(value) => update({ availability: value })} placeholder="Available today, 10:00 AM – 7:00 PM" placeholderTextColor="#829AB1" multiline style={styles.formTextArea} /></>}{section === "preview" && <View style={styles.profilePreview}><View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{initials(profile.name)}</Text></View><Text style={styles.identityName}>{profile.name}</Text><Text style={styles.identityCopy}>{profile.services || "Add your services"}</Text><Text style={styles.previewText}>{profile.serviceArea}</Text><Text style={styles.previewText}>{profile.availability}</Text><Text style={styles.previewAbout}>{profile.about}</Text></View>}{section !== "preview" && <PrimaryButton label="Save profile" icon="check" onPress={() => { onSave().then(() => { setSection("menu"); Alert.alert("Profile saved", "Your worker profile has been saved to your account."); }).catch((error) => Alert.alert("Profile not saved", error instanceof Error ? error.message : "Please try again.")); }} />}</View></>;
+    return <>
+      <Pressable onPress={() => setSection("menu")} style={({ pressed }) => [styles.backRow, pressed && styles.pressed]}><MaterialIcons name="arrow-back" size={21} color="#102A43" /><Text style={styles.backText}>Worker profile</Text></Pressable>
+      <View style={styles.workerForm}>
+        <Text style={styles.formTitle}>{title}</Text>
+        {section === "details" && <><Text style={styles.formLabel}>Display name</Text><TextInput value={profile.name} onChangeText={(value) => update({ name: value })} placeholder="Your name" placeholderTextColor="#829AB1" style={styles.formInput} /><Text style={styles.formLabel}>Phone number</Text><TextInput value={profile.phone} onChangeText={(value) => update({ phone: value })} placeholder="10-digit mobile number" keyboardType="phone-pad" placeholderTextColor="#829AB1" style={styles.formInput} /><Text style={styles.formLabel}>About your work</Text><TextInput value={profile.about} onChangeText={(value) => update({ about: value })} placeholder="Describe your experience" placeholderTextColor="#829AB1" multiline style={styles.formTextArea} /></>}
+        {section === "services" && <><Text style={styles.formCopy}>Use commas to list the services customers can book.</Text><Text style={styles.formLabel}>Skills & services</Text><TextInput value={profile.services} onChangeText={(value) => update({ services: value })} placeholder="Plumber, Handyman" placeholderTextColor="#829AB1" multiline style={styles.formTextArea} /></>}
+        {section === "area" && <><Text style={styles.formCopy}>Customers see this service area while choosing nearby help.</Text><Text style={styles.formLabel}>Service area</Text><TextInput value={profile.serviceArea} onChangeText={(value) => update({ serviceArea: value })} placeholder="Area and city" placeholderTextColor="#829AB1" style={styles.formInput} /><SecondaryButton label="Use my current location" icon="my-location" onPress={() => { void onUseCurrentArea(); }} /></>}
+        {section === "availability" && <><Text style={styles.formCopy}>The Online switch on your dashboard controls immediate visibility.</Text><Text style={styles.formLabel}>Working hours</Text><TextInput value={profile.availability} onChangeText={(value) => update({ availability: value })} placeholder="Available today, 10:00 AM – 7:00 PM" placeholderTextColor="#829AB1" multiline style={styles.formTextArea} /></>}
+        {section === "preview" && <View style={styles.profilePreview}><View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{initials(profile.name)}</Text></View><Text style={styles.identityName}>{profile.name}</Text><Text style={styles.identityCopy}>{profile.services || "Add your services"}</Text><Text style={styles.previewText}>{profile.serviceArea}</Text><Text style={styles.previewText}>{profile.availability}</Text><Text style={styles.previewAbout}>{profile.about}</Text></View>}
+        {section !== "preview" && <PrimaryButton label="Save profile" icon="check" onPress={save} />}
+      </View>
+    </>;
   }
+
   return <><Intro title="Worker profile" copy="Keep your cooperative profile accurate and trustworthy." /><View style={styles.workerIdentity}><View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{initials(profile.name)}</Text></View><View style={styles.flex}><View style={styles.identityLine}><Text style={styles.identityName}>{profile.name}</Text><MaterialIcons name="verified" size={19} color="#0F766E" /></View><Text style={styles.identityCopy}>{profile.services || "Add your services"}</Text><Text style={styles.ratingTiny}>★ 4.9 · 128 reviews</Text></View></View><SettingsRow icon="person-outline" label="Personal details" onPress={() => setSection("details")} /><SettingsRow icon="build" label="Skills & services" onPress={() => setSection("services")} /><SettingsRow icon="location-on" label="Service area" onPress={() => setSection("area")} /><SettingsRow icon="schedule" label="Availability" onPress={() => setSection("availability")} /><SettingsRow icon="visibility" label="Public profile preview" onPress={() => setSection("preview")} /><Pressable onPress={onSignOut} style={({ pressed }) => [styles.signOutRow, pressed && styles.pressed]}><MaterialIcons name="logout" size={20} color="#C2410C" /><Text style={styles.signOutText}>Sign out</Text></Pressable></>;
 }
 
@@ -134,6 +184,7 @@ function PrimaryButton({ label, icon, onPress }: { label: string; icon: keyof ty
 function SecondaryButton({ label, icon, onPress, danger }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; onPress: () => void; danger?: boolean }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.secondaryButton, danger && styles.secondaryDanger, pressed && styles.pressed]}><MaterialIcons name={icon} size={18} color={danger ? "#C2410C" : "#0F766E"} /><Text style={[styles.secondaryText, danger && styles.secondaryDangerText]}>{label}</Text></Pressable>; }
 function Status({ status }: { status: string }) { const value = status.toLowerCase(); const color = value === "completed" || value === "verified" ? "#15803D" : value === "pending" || value === "in review" ? "#D97706" : value === "rejected" ? "#C2410C" : "#0F766E"; const label = value.includes("_") ? bookingStatusLabel(value as BookingStatus) : status; return <View style={[styles.status, { backgroundColor: `${color}16` }]}><Text style={[styles.statusText, { color }]}>{label}</Text></View>; }
 function EmptyState({ icon, title, copy }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; copy: string }) { return <View style={styles.empty}><View style={styles.emptyIcon}><MaterialIcons name={icon} size={28} color="#0F766E" /></View><Text style={styles.emptyTitle}>{title}</Text><Text style={styles.emptyCopy}>{copy}</Text></View>; }
+function bookingToJob(booking: Booking): Job { return { id: booking.id, customer: booking.customerName || "Customer", service: booking.serviceName, schedule: `${booking.date} · ${booking.time}`, address: booking.location.address, amount: booking.price, status: booking.status, note: booking.description || "No additional work description was provided." }; }
 function SettingsRow({ icon, label, onPress }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; onPress: () => void }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.settings, pressed && styles.pressed]}><MaterialIcons name={icon} size={20} color="#0F766E" /><Text style={styles.settingsLabel}>{label}</Text><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable>; }
 function Activity({ icon, title, time }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; time: string }) { return <View style={styles.activity}><View style={styles.activityIcon}><MaterialIcons name={icon} size={18} color="#0F766E" /></View><View style={styles.flex}><Text style={styles.activityTitle}>{title}</Text><Text style={styles.activityTime}>{time}</Text></View></View>; }
 async function openPrivateCall() { const phone = "9000000000"; const url = `tel:${phone}`; const supported = await Linking.canOpenURL(url); if (!supported) { Alert.alert("Calling unavailable", "A compatible phone application is not available on this device."); return; } await Linking.openURL(url); }
