@@ -2,6 +2,8 @@ import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { onRequest } from "firebase-functions/v2/https";
+import { createRazorpayOrder, handleRazorpayWebhook } from "./razorpay";
 
 initializeApp();
 
@@ -11,6 +13,14 @@ type Booking = {
   customerId: string;
   workerId: string;
   serviceName: string;
+  status: string;
+};
+
+type Payment = {
+  bookingId: string;
+  customerId: string;
+  workerId: string;
+  amount: number;
   status: string;
 };
 
@@ -61,6 +71,20 @@ export const notifyBookingStatusChange = onDocumentUpdated("bookings/{bookingId}
     `${after.serviceName} has been marked ${after.status.replace("_", " ")}.`,
     { type: "booking_status", bookingId: event.params.bookingId, status: after.status },
   );
+});
+
+export const createRazorpayOrderHttp = onRequest({ cors: true }, createRazorpayOrder);
+export const razorpayWebhook = onRequest({ cors: false }, handleRazorpayWebhook);
+
+export const notifyPaymentStatusChange = onDocumentUpdated("payments/{paymentId}", async (event) => {
+  const before = event.data?.before.data() as Payment | undefined;
+  const after = event.data?.after.data() as Payment | undefined;
+  if (!before || !after || before.status === after.status) return;
+  if (after.status !== "paid" && after.status !== "failed") return;
+  const title = after.status === "paid" ? "Payment confirmed" : "Payment failed";
+  const body = after.status === "paid" ? `₹${after.amount} payment confirmed. Your invoice is ready.` : `Payment for booking ${after.bookingId} failed. You can retry from the app.`;
+  await notifyUser(after.customerId, title, body, { type: "payment_status", paymentId: event.params.paymentId, bookingId: after.bookingId, status: after.status });
+  if (after.status === "paid") await notifyUser(after.workerId, "Booking payment confirmed", `Payment for booking ${after.bookingId} is confirmed.`, { type: "payment_status", paymentId: event.params.paymentId, bookingId: after.bookingId, status: after.status });
 });
 
 export const notifyNewChatMessage = onDocumentCreated("chats/{bookingId}/messages/{messageId}", async (event) => {

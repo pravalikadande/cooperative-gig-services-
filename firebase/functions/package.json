@@ -16,6 +16,7 @@
     "firebase-functions": "^6.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vitest": "^2.1.9"
   }
 }

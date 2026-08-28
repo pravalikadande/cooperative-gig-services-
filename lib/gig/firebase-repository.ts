@@ -16,9 +16,9 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
-import { firestore, firebaseStorage } from "./firebase";
+import { firebaseAuth, firestore, firebaseStorage } from "./firebase";
 import { isBookingContactEligible } from "./booking-lifecycle";
-import type { AppUser, Booking, BookingStatus, ChatMessage, Review, UserRole, WorkerProfile } from "./models";
+import type { AppUser, Booking, BookingStatus, ChatMessage, Complaint, Certification, CooperativeSociety, DemandForecast, Invoice, LanguageCode, PaymentRecord, Review, UserRole, WelfareRecord, WorkerProfile } from "./models";
 import { buildWorkerDirectoryProfile, workerProfileFirestorePayload, type WorkerProfileDraftInput } from "./worker-directory";
 import { bookingFirestorePayload, type BookingRequestInput } from "./booking-sync";
 
@@ -36,6 +36,9 @@ export async function readFirebaseUser(firebaseUser: User): Promise<AppUser | nu
     role: data.role as UserRole,
     profileImage: typeof data.profileImage === "string" ? data.profileImage : undefined,
     location: data.location,
+    federationId: typeof data.federationId === "string" ? data.federationId : undefined,
+    societyId: typeof data.societyId === "string" ? data.societyId : undefined,
+    language: data.language === "te" || data.language === "hi" ? data.language : "en",
     createdAt: data.createdAt?.toDate?.().toISOString?.() || new Date().toISOString(),
   };
 }
@@ -73,7 +76,7 @@ export async function createFirebaseUserProfile(
 
 export async function updateFirebaseUserProfile(
   user: AppUser,
-  input: { name?: string; phone?: string; address?: string; workerProfile?: Record<string, unknown> },
+  input: { name?: string; phone?: string; address?: string; language?: LanguageCode; workerProfile?: Record<string, unknown> },
 ) {
   if (!firestore) return;
   await setDoc(
@@ -95,7 +98,7 @@ export async function updateFirebaseUserProfile(
 }
 
 function mapWorkerProfile(id: string, data: Record<string, unknown>): WorkerProfile {
-  return buildWorkerDirectoryProfile(
+  const profile = buildWorkerDirectoryProfile(
     {
       id: typeof data.userId === "string" ? data.userId : id,
       name: typeof data.name === "string" ? data.name : "Service partner",
@@ -127,6 +130,14 @@ function mapWorkerProfile(id: string, data: Record<string, unknown>): WorkerProf
       about: typeof data.about === "string" ? data.about : "",
     },
   );
+  return {
+    ...profile,
+    federationId: typeof data.federationId === "string" ? data.federationId : undefined,
+    societyId: typeof data.societyId === "string" ? data.societyId : undefined,
+    verificationStatus: data.verificationStatus === "pending" || data.verificationStatus === "verified" || data.verificationStatus === "rejected" ? data.verificationStatus : "not_submitted",
+    certificationIds: Array.isArray(data.certificationIds) ? data.certificationIds.filter((item): item is string => typeof item === "string") : [],
+    isEmergencyAvailable: Boolean(data.isEmergencyAvailable),
+  };
 }
 
 export async function publishWorkerDirectoryProfile(user: AppUser, draft?: WorkerProfileDraftInput) {
@@ -185,6 +196,10 @@ function mapBooking(id: string, data: Record<string, unknown>): Booking {
     description: String(data.description ?? ""),
     imageUrl: typeof data.imageUrl === "string" ? data.imageUrl : undefined,
     price: Number(data.price),
+    priority: data.priority === "emergency" || data.priority === "on_demand" ? data.priority : "standard",
+    paymentStatus: data.paymentStatus === "pending" || data.paymentStatus === "paid" || data.paymentStatus === "refunded" || data.paymentStatus === "failed" ? data.paymentStatus : "unpaid",
+    paymentId: typeof data.paymentId === "string" ? data.paymentId : undefined,
+    invoiceId: typeof data.invoiceId === "string" ? data.invoiceId : undefined,
     status: data.status as BookingStatus,
     createdAt: timestampToIso(data.createdAt),
     updatedAt: timestampToIso(data.updatedAt),
@@ -279,4 +294,180 @@ export async function uploadImage(uri: string, path: `profileImages/${string}` |
   const storageRef = ref(firebaseStorage, path);
   await uploadBytes(storageRef, blob, { contentType: blob.type });
   return getDownloadURL(storageRef);
+}
+
+
+export async function saveCertification(input: Omit<Certification, "id">) {
+  const database = requireFirestore();
+  const certificationRef = doc(collection(database, "certifications"));
+  await setDoc(certificationRef, { ...input, certificationId: certificationRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  return certificationRef.id;
+}
+
+export function subscribeToCertifications(workerId: string, onChange: (items: Certification[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  const certificationsQuery = query(collection(database, "certifications"), where("workerId", "==", workerId));
+  return onSnapshot(certificationsQuery, (snapshot) => onChange(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<Certification, "id">) }))));
+}
+
+export async function saveWelfareRecord(input: Omit<WelfareRecord, "id">) {
+  const database = requireFirestore();
+  const recordRef = doc(collection(database, "welfareRecords"));
+  await setDoc(recordRef, { ...input, welfareRecordId: recordRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  return recordRef.id;
+}
+
+export function subscribeToWelfareRecords(workerId: string, onChange: (items: WelfareRecord[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  const welfareQuery = query(collection(database, "welfareRecords"), where("workerId", "==", workerId));
+  return onSnapshot(welfareQuery, (snapshot) => onChange(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<WelfareRecord, "id">) }))));
+}
+
+export async function createComplaint(input: Omit<Complaint, "id" | "createdAt" | "status">) {
+  const database = requireFirestore();
+  const complaintRef = doc(collection(database, "complaints"));
+  await setDoc(complaintRef, { ...input, complaintId: complaintRef.id, status: "open", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  return complaintRef.id;
+}
+
+export type PaymentOrderResponse = {
+  keyId: string;
+  orderId: string;
+  paymentRecordId: string;
+  amount: number;
+  currency: string;
+};
+
+/**
+ * Starts a gateway order. The server reads the booking amount and creates the
+ * payment record; the client never writes payment status or invoice fields.
+ */
+export async function createPaymentAttempt(input: Pick<PaymentRecord, "bookingId" | "customerId" | "workerId" | "amount" | "gateway">): Promise<string> {
+  const endpoint = process.env.EXPO_PUBLIC_CREATE_PAYMENT_ORDER_URL;
+  const currentUser = firebaseAuth?.currentUser;
+  if (!endpoint) throw new Error("Payment service URL is not configured.");
+  if (!currentUser) throw new Error("Please sign in before starting payment.");
+
+  const idToken = await currentUser.getIdToken();
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ bookingId: input.bookingId }),
+  });
+  const body = await response.json().catch(() => ({})) as Partial<PaymentOrderResponse> & { error?: string };
+  if (!response.ok || typeof body.paymentRecordId !== "string") {
+    throw new Error(body.error || "Could not create payment order.");
+  }
+  return body.paymentRecordId;
+}
+
+export function subscribeToPayments(userId: string, role: "customer" | "worker", onChange: (items: PaymentRecord[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  const paymentsQuery = query(collection(database, "payments"), where(role === "customer" ? "customerId" : "workerId", "==", userId));
+  return onSnapshot(paymentsQuery, (snapshot) => onChange(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<PaymentRecord, "id">) }))));
+}
+
+export function subscribeToInvoices(userId: string, role: "customer" | "worker", onChange: (items: Invoice[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  const invoicesQuery = query(collection(database, "invoices"), where(role === "customer" ? "customerId" : "workerId", "==", userId));
+  return onSnapshot(invoicesQuery, (snapshot) => onChange(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<Invoice, "id">) }))));
+}
+
+export function subscribeToSocieties(federationId: string, onChange: (items: CooperativeSociety[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  const societiesQuery = query(collection(database, "societies"), where("federationId", "==", federationId));
+  return onSnapshot(societiesQuery, (snapshot) => onChange(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<CooperativeSociety, "id">) }))));
+}
+
+export async function createCooperativeSociety(input: Omit<CooperativeSociety, "id">) {
+  const database = requireFirestore();
+  const societyRef = doc(collection(database, "societies"));
+  await setDoc(societyRef, { ...input, societyId: societyRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  return societyRef.id;
+}
+
+export async function saveDemandForecast(input: Omit<DemandForecast, "id" | "generatedAt">) {
+  const database = requireFirestore();
+  const forecastRef = doc(collection(database, "demandForecasts"));
+  await setDoc(forecastRef, { ...input, forecastId: forecastRef.id, generatedAt: serverTimestamp() });
+  return forecastRef.id;
+}
+
+export function subscribeToDemandForecasts(area: string, onChange: (items: DemandForecast[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  const forecastsQuery = query(collection(database, "demandForecasts"), where("area", "==", area), orderBy("generatedAt", "desc"), limit(50));
+  return onSnapshot(forecastsQuery, (snapshot) => onChange(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<DemandForecast, "id">) }))));
+}
+
+
+export async function uploadVerificationDocument(uri: string, path: `verificationDocuments/${string}`) {
+  if (!firebaseStorage) throw new Error("Firebase Storage is not enabled for this project.");
+  const response = await fetch(uri);
+  if (!response.ok) throw new Error("The selected document could not be read.");
+  const blob = await response.blob();
+  const contentType = blob.type || "application/octet-stream";
+  const allowed = contentType === "application/pdf" || contentType.startsWith("image/");
+  if (!allowed) throw new Error("Upload a PDF or image document.");
+  const storageRef = ref(firebaseStorage, path);
+  await uploadBytes(storageRef, blob, { contentType });
+  return getDownloadURL(storageRef);
+}
+
+
+export function subscribeToAllBookings(onChange: (items: Booking[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  return onSnapshot(collection(database, "bookings"), (snapshot) => {
+    const items = snapshot.docs.map((item) => mapBooking(item.id, item.data()));
+    items.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    onChange(items);
+  });
+}
+
+export function subscribeToComplaints(onChange: (items: Complaint[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  return onSnapshot(collection(database, "complaints"), (snapshot) => {
+    const items = snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<Complaint, "id">) }));
+    items.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    onChange(items);
+  });
+}
+
+export function subscribeToUserDirectory(onChange: (items: AppUser[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  return onSnapshot(collection(database, "users"), (snapshot) => {
+    const items = snapshot.docs.map((item) => {
+      const data = item.data();
+      return {
+        id: item.id,
+        name: typeof data.name === "string" ? data.name : "Neighbour",
+        email: typeof data.email === "string" ? data.email : "",
+        phone: typeof data.phone === "string" ? data.phone : undefined,
+        address: typeof data.address === "string" ? data.address : undefined,
+        role: data.role as UserRole,
+        profileImage: typeof data.profileImage === "string" ? data.profileImage : undefined,
+        location: data.location,
+        federationId: typeof data.federationId === "string" ? data.federationId : undefined,
+        societyId: typeof data.societyId === "string" ? data.societyId : undefined,
+        language: data.language === "te" || data.language === "hi" ? data.language : "en",
+        createdAt: data.createdAt?.toDate?.().toISOString?.() || new Date().toISOString(),
+      } satisfies AppUser;
+    });
+    onChange(items);
+  });
+}
+
+
+export async function updateWorkerVerification(workerId: string, status: "verified" | "rejected") {
+  const database = requireFirestore();
+  await updateDoc(doc(database, "workers", workerId), {
+    verificationStatus: status,
+    isVerified: status === "verified",
+    updatedAt: serverTimestamp(),
+  });
+  await setDoc(doc(database, "users", workerId), { verificationStatus: status, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+export async function updateComplaintStatus(complaintId: string, status: Complaint["status"]) {
+  const database = requireFirestore();
+  await updateDoc(doc(database, "complaints", complaintId), { status, updatedAt: serverTimestamp() });
 }

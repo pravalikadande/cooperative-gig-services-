@@ -1,6 +1,17 @@
 export const USER_ROLES = ["customer", "worker", "admin"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+export const VERIFICATION_STATUSES = ["not_submitted", "pending", "verified", "rejected"] as const;
+export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
+
+export const BOOKING_PRIORITIES = ["standard", "on_demand", "emergency"] as const;
+export type BookingPriority = (typeof BOOKING_PRIORITIES)[number];
+
+export const PAYMENT_STATUSES = ["unpaid", "pending", "paid", "refunded", "failed"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export type LanguageCode = "en" | "te" | "hi";
+
 export const BOOKING_STATUSES = [
   "pending",
   "accepted",
@@ -34,6 +45,9 @@ export type AppUser = {
   role: UserRole;
   profileImage?: string;
   location?: Coordinate;
+  federationId?: string;
+  societyId?: string;
+  language?: LanguageCode;
   createdAt: string;
 };
 
@@ -55,6 +69,11 @@ export type WorkerProfile = {
   availability: string;
   startingPrice: number;
   about: string;
+  federationId?: string;
+  societyId?: string;
+  verificationStatus?: VerificationStatus;
+  certificationIds?: string[];
+  isEmergencyAvailable?: boolean;
 };
 
 export type BookingLocation = Coordinate & {
@@ -79,9 +98,93 @@ export type Booking = {
   description: string;
   imageUrl?: string;
   price: number;
+  priority?: BookingPriority;
+  paymentStatus?: PaymentStatus;
+  paymentId?: string;
+  invoiceId?: string;
   status: BookingStatus;
   createdAt: string;
   updatedAt: string;
+};
+
+export type Certification = {
+  id: string;
+  workerId: string;
+  title: string;
+  issuingBody: string;
+  issuedOn?: string;
+  expiresOn?: string;
+  documentUrl?: string;
+  status: VerificationStatus;
+};
+
+export type WelfareRecord = {
+  id: string;
+  workerId: string;
+  type: "insurance" | "benefit" | "safety_training";
+  provider?: string;
+  policyNumber?: string;
+  coverageStart?: string;
+  coverageEnd?: string;
+  status: "active" | "expired" | "pending";
+};
+
+export type CooperativeSociety = {
+  id: string;
+  federationId: string;
+  name: string;
+  district: string;
+  isActive: boolean;
+};
+
+export type Invoice = {
+  id: string;
+  bookingId: string;
+  customerId: string;
+  workerId: string;
+  subtotal: number;
+  cooperativeFee: number;
+  total: number;
+  status: PaymentStatus;
+  issuedAt: string;
+};
+
+export type PaymentRecord = {
+  id: string;
+  bookingId: string;
+  customerId: string;
+  workerId: string;
+  amount: number;
+  cooperativeFee: number;
+  workerPayout: number;
+  gateway: "razorpay" | "upi" | "offline";
+  status: PaymentStatus;
+  receiptUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Complaint = {
+  id: string;
+  bookingId?: string;
+  reporterId: string;
+  againstUserId?: string;
+  category: "service_quality" | "safety" | "payment" | "other";
+  description: string;
+  status: "open" | "under_review" | "resolved" | "rejected";
+  createdAt: string;
+};
+
+export type DemandForecast = {
+  id: string;
+  serviceId: string;
+  area: string;
+  period: string;
+  predictedJobs: number;
+  recommendedWorkerIds: string[];
+  confidence: number;
+  generatedAt: string;
+  source: "rules" | "ai";
 };
 
 export type ChatMessage = {
