@@ -1,21 +1,12 @@
-import { useEffect, useState } from "react";
-import { useColorScheme as useRNColorScheme } from "react-native";
+import { useSyncExternalStore } from "react";
+
+import { getGlobalColorScheme, subscribeToGlobalColorScheme } from "@/lib/theme-provider";
 
 /**
- * To support static rendering, this value needs to be re-calculated on the client side for web
+ * Expo Router can evaluate web route modules before the provider tree renders.
+ * Reading the provider context here caused the route to crash during startup.
+ * The ThemeProvider publishes the same selected value through this external store.
  */
 export function useColorScheme() {
-  const [hasHydrated, setHasHydrated] = useState(false);
-
-  useEffect(() => {
-    setHasHydrated(true);
-  }, []);
-
-  const colorScheme = useRNColorScheme();
-
-  if (hasHydrated) {
-    return colorScheme;
-  }
-
-  return "light";
+  return useSyncExternalStore(subscribeToGlobalColorScheme, getGlobalColorScheme, getGlobalColorScheme);
 }

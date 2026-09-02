@@ -67,9 +67,3 @@ Thumbs.db
 
 # Private Firebase configuration
 .env
-
-# Generated Firebase Functions output
-firebase/functions/lib/
-# Local environment secrets
-.env
-

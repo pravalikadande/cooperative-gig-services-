@@ -18,7 +18,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import { firebaseAuth, firestore, firebaseStorage } from "./firebase";
 import { isBookingContactEligible } from "./booking-lifecycle";
-import type { AppUser, Booking, BookingStatus, ChatMessage, Complaint, Certification, CooperativeSociety, DemandForecast, Invoice, LanguageCode, PaymentRecord, Review, UserRole, WelfareRecord, WorkerProfile } from "./models";
+import type { AppUser, Booking, BookingStatus, ChatMessage, Complaint, Certification, CooperativeSociety, DemandForecast, Invoice, LanguageCode, PaymentRecord, Review, UserRole, WelfareRecord, WorkerKyc, WorkerProfile } from "./models";
 import { buildWorkerDirectoryProfile, workerProfileFirestorePayload, type WorkerProfileDraftInput } from "./worker-directory";
 import { bookingFirestorePayload, type BookingRequestInput } from "./booking-sync";
 
@@ -470,4 +470,73 @@ export async function updateWorkerVerification(workerId: string, status: "verifi
 export async function updateComplaintStatus(complaintId: string, status: Complaint["status"]) {
   const database = requireFirestore();
   await updateDoc(doc(database, "complaints", complaintId), { status, updatedAt: serverTimestamp() });
+}
+
+
+export type AdminData = {
+  workers: WorkerProfile[];
+  users: AppUser[];
+  bookings: Booking[];
+};
+
+function mapWorkerKyc(id: string, data: Record<string, unknown>): WorkerKyc {
+  const status = data.status === "approved" || data.status === "needs_resubmission" || data.status === "rejected" ? data.status : data.status === "pending" ? "pending" : "not_submitted";
+  return {
+    workerId: typeof data.workerId === "string" ? data.workerId : id,
+    idType: typeof data.idType === "string" ? data.idType : undefined,
+    idNumberLast4: typeof data.idNumberLast4 === "string" ? data.idNumberLast4 : undefined,
+    idDocumentUrl: typeof data.idDocumentUrl === "string" ? data.idDocumentUrl : undefined,
+    selfieUrl: typeof data.selfieUrl === "string" ? data.selfieUrl : undefined,
+    status,
+    submittedAt: timestampToIso(data.submittedAt),
+    reviewedAt: timestampToIso(data.reviewedAt),
+    reviewedBy: typeof data.reviewedBy === "string" ? data.reviewedBy : undefined,
+    reviewNote: typeof data.reviewNote === "string" ? data.reviewNote : undefined,
+  };
+}
+
+export async function uploadKycDocument(uri: string, workerId: string, kind: "id" | "selfie", mimeType?: string) {
+  if (!firebaseStorage) throw new Error("Firebase Storage is not enabled for this project.");
+  const response = await fetch(uri);
+  if (!response.ok) throw new Error("The selected document could not be read.");
+  const blob = await response.blob();
+  const contentType = mimeType || blob.type || "application/octet-stream";
+  if (!(contentType === "application/pdf" || contentType.startsWith("image/"))) throw new Error("Upload a PDF or image document.");
+  const extension = contentType === "application/pdf" ? "pdf" : contentType.split("/")[1] || "jpg";
+  const storageRef = ref(firebaseStorage, `kyc/${workerId}/${kind}.${extension}`);
+  await uploadBytes(storageRef, blob, { contentType });
+  return getDownloadURL(storageRef);
+}
+
+export async function saveWorkerKyc(input: Omit<WorkerKyc, "status" | "submittedAt">) {
+  const database = requireFirestore();
+  await setDoc(doc(database, "workerKyc", input.workerId), { ...input, status: "pending", submittedAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+}
+
+export function subscribeToWorkerKyc(workerId: string, onChange: (item: WorkerKyc | null) => void): Unsubscribe {
+  const database = requireFirestore();
+  return onSnapshot(doc(database, "workerKyc", workerId), (snapshot) => onChange(snapshot.exists() ? mapWorkerKyc(snapshot.id, snapshot.data()) : null));
+}
+
+export function subscribeToAllWorkerKyc(onChange: (items: WorkerKyc[]) => void): Unsubscribe {
+  const database = requireFirestore();
+  return onSnapshot(collection(database, "workerKyc"), (snapshot) => onChange(snapshot.docs.map((item) => mapWorkerKyc(item.id, item.data()))));
+}
+
+export async function reviewWorkerKyc(workerId: string, status: "approved" | "needs_resubmission", reviewer: string, reviewNote?: string) {
+  const database = requireFirestore();
+  await updateDoc(doc(database, "workerKyc", workerId), { status, reviewedBy: reviewer, reviewNote: reviewNote || null, reviewedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  if (status === "approved") await updateWorkerVerification(workerId, "verified");
+}
+
+export function subscribeToAdminData(onChange: (data: AdminData) => void): Unsubscribe {
+  const database = requireFirestore();
+  let users: AppUser[] = [];
+  let workers: WorkerProfile[] = [];
+  let bookings: Booking[] = [];
+  const emit = () => onChange({ users, workers, bookings });
+  const unsubUsers = subscribeToUserDirectory((items) => { users = items; emit(); });
+  const unsubWorkers = subscribeToWorkerDirectory((items) => { workers = items; emit(); });
+  const unsubBookings = subscribeToAllBookings((items) => { bookings = items; emit(); });
+  return () => { unsubUsers(); unsubWorkers(); unsubBookings(); };
 }

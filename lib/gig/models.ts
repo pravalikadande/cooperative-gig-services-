@@ -9,6 +9,8 @@ export type BookingPriority = (typeof BOOKING_PRIORITIES)[number];
 
 export const PAYMENT_STATUSES = ["unpaid", "pending", "paid", "refunded", "failed"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+export const PAYMENT_METHODS = ["razorpay", "upi", "offline", "card", "netbanking", "wallet", "cash_on_service"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export type LanguageCode = "en" | "te" | "hi";
 
@@ -100,6 +102,7 @@ export type Booking = {
   price: number;
   priority?: BookingPriority;
   paymentStatus?: PaymentStatus;
+  paymentMethod?: PaymentMethod;
   paymentId?: string;
   invoiceId?: string;
   status: BookingStatus;
@@ -205,6 +208,20 @@ export type Review = {
   rating: 1 | 2 | 3 | 4 | 5;
   comment?: string;
   createdAt: string;
+};
+
+export type WorkerKyc = {
+  workerId: string;
+  idType?: string;
+  idNumberLast4?: string;
+  idDocumentUrl?: string;
+  selfieUrl?: string;
+  status: "not_submitted" | "pending" | "approved" | "needs_resubmission" | "rejected";
+  submittedAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  rejectionReason?: string;
 };
 
 export type AppNotification = {

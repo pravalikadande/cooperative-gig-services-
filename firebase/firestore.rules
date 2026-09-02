@@ -34,6 +34,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /workerKyc/{workerId} {
+      allow read: if signedIn() && (request.auth.uid == workerId || isAdmin());
+      allow create, update: if signedIn() && request.auth.uid == workerId &&
+        request.resource.data.workerId == request.auth.uid &&
+        request.resource.data.status in ['pending', 'needs_resubmission'];
+      allow update: if isAdmin() &&
+        request.resource.data.workerId == resource.data.workerId &&
+        request.resource.data.status in ['approved', 'rejected', 'needs_resubmission'];
+      allow delete: if false;
+    }
+
     match /workers/{workerId} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
@@ -63,13 +74,7 @@ service cloud.firestore {
           resource.data.workerId == request.auth.uid
         ) &&
         request.resource.data.customerId == resource.data.customerId &&
-        request.resource.data.workerId == resource.data.workerId &&
-        ((!('paymentStatus' in resource.data) && !('paymentStatus' in request.resource.data)) ||
-          request.resource.data.paymentStatus == resource.data.paymentStatus) &&
-        ((!('paymentId' in resource.data) && !('paymentId' in request.resource.data)) ||
-          request.resource.data.paymentId == resource.data.paymentId) &&
-        ((!('invoiceId' in resource.data) && !('invoiceId' in request.resource.data)) ||
-          request.resource.data.invoiceId == resource.data.invoiceId)
+        request.resource.data.workerId == resource.data.workerId
       );
       allow delete: if false;
     }
@@ -100,43 +105,6 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /certifications/{certificationId} {
-      allow read: if signedIn() && (resource.data.workerId == request.auth.uid || isAdmin());
-      allow create: if signedIn() && request.resource.data.workerId == request.auth.uid;
-      allow update: if isAdmin() || (signedIn() && resource.data.workerId == request.auth.uid && request.resource.data.workerId == resource.data.workerId);
-      allow delete: if isAdmin();
-    }
-
-    match /welfareRecords/{recordId} {
-      allow read: if signedIn() && (resource.data.workerId == request.auth.uid || isAdmin());
-      allow create: if signedIn() && request.resource.data.workerId == request.auth.uid;
-      allow update: if isAdmin() || (signedIn() && resource.data.workerId == request.auth.uid && request.resource.data.workerId == resource.data.workerId);
-      allow delete: if isAdmin();
-    }
-
-    match /invoices/{invoiceId} {
-      allow read: if signedIn() && (resource.data.customerId == request.auth.uid || resource.data.workerId == request.auth.uid || isAdmin());
-      allow create, update: if false;
-      allow delete: if false;
-    }
-
-    match /payments/{paymentId} {
-      allow read: if signedIn() && (resource.data.customerId == request.auth.uid || resource.data.workerId == request.auth.uid || isAdmin());
-      allow create, update: if false;
-      allow delete: if false;
-    }
-
-    match /societies/{societyId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
-    }
-
-    match /demandForecasts/{forecastId} {
-      allow read: if signedIn() && isAdmin();
-      allow create, update: if isAdmin();
-      allow delete: if false;
-    }
-
     match /notifications/{notificationId} {
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow update: if signedIn() && resource.data.userId == request.auth.uid &&
@@ -154,8 +122,8 @@ service cloud.firestore {
 
     match /complaints/{complaintId} {
       allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid;
-      allow read: if signedIn() && (resource.data.reporterId == request.auth.uid || resource.data.againstUserId == request.auth.uid || isAdmin());
-      allow update: if isAdmin() || (signedIn() && resource.data.reporterId == request.auth.uid && request.resource.data.reporterId == resource.data.reporterId);
+      allow read: if signedIn() && (resource.data.reporterId == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
       allow delete: if false;
     }
   }

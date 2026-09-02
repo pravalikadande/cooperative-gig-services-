@@ -77,3 +77,13 @@ export function useThemeContext(): ThemeContextValue {
   }
   return ctx;
 }
+
+
+export function getGlobalColorScheme(): ColorScheme {
+  return Appearance.getColorScheme() === "dark" ? "dark" : "light";
+}
+
+export function subscribeToGlobalColorScheme(listener: () => void): () => void {
+  const subscription = Appearance.addChangeListener(() => listener());
+  return () => subscription.remove();
+}

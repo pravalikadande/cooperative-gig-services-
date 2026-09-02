@@ -9,6 +9,7 @@ import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { GigSessionProvider } from "@/lib/gig/session-context";
+import { GlobalLanguagePicker, I18nProvider } from "@/lib/i18n";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -81,6 +82,7 @@ export default function RootLayout() {
 
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <I18nProvider>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <GigSessionProvider>
@@ -91,10 +93,12 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
+          <GlobalLanguagePicker />
           <StatusBar style="auto" />
           </GigSessionProvider>
         </QueryClientProvider>
       </trpc.Provider>
+      </I18nProvider>
     </GestureHandlerRootView>
   );
 

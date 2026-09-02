@@ -1,15 +1,15 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
+
   View,
 } from "react-native";
 
@@ -19,8 +19,11 @@ import { AdminOperations, WorkerOperations } from "@/components/gig/operations";
 import { useGigSession } from "@/lib/gig/session-context";
 import type { AppUser, UserRole } from "@/lib/gig/models";
 import { PUBLIC_REGISTRATION_ROLES } from "@/lib/gig/registration";
+import { LocalizedText, LocalizedTextInput, useI18n } from "@/lib/i18n";
 
 type AuthMode = "welcome" | "login" | "register";
+const Text = LocalizedText;
+const TextInput = LocalizedTextInput;
 
 const roleCopy: Record<UserRole, { title: string; detail: string; icon: "person" | "handyman" | "admin-panel-settings" }> = {
   customer: { title: "Find trusted help", detail: "Book verified cooperative workers near you.", icon: "person" },
@@ -29,12 +32,25 @@ const roleCopy: Record<UserRole, { title: string; detail: string; icon: "person"
 };
 
 export default function HomeScreen() {
-  const { isLoading, user, signIn, resetPassword, updateProfile, signOut } = useGigSession();
+  const { isLoading, user, signIn, signInWithGoogle, resetPassword, updateProfile, signOut } = useGigSession();
+  const { t } = useI18n();
   const [mode, setMode] = useState<AuthMode>("welcome");
   const [selectedRole, setSelectedRole] = useState<UserRole>("customer");
+  const [adminMode, setAdminMode] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return undefined;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (mode === "welcome") return false;
+      setAdminMode(false);
+      setMode("welcome");
+      return true;
+    });
+    return () => subscription.remove();
+  }, [mode]);
 
   const submit = async () => {
     if (!email.trim() || !password.trim()) {
@@ -46,7 +62,7 @@ export default function HomeScreen() {
       return;
     }
     try {
-      await signIn({ name, email, password, role: selectedRole, isNew: mode === "register" });
+      await signIn({ name, email, password, role: adminMode ? "admin" : selectedRole, isNew: mode === "register" });
     } catch (error) {
       Alert.alert("Account action could not be completed", error instanceof Error ? error.message : "Please review the details and try again.");
     }
@@ -65,11 +81,12 @@ export default function HomeScreen() {
             <Text style={styles.heroCopy}>Find dependable cooperative workers, manage services, and keep every interaction in one safe place.</Text>
           </View>
           <View style={styles.welcomeActions}>
-            <PrimaryButton label="Sign in" onPress={() => setMode("login")} />
+            <PrimaryButton label={t("signIn")} onPress={() => setMode("login")} />
             <Pressable onPress={() => setMode("register")} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
-              <Text style={styles.secondaryButtonText}>Create an account</Text>
+              <Text style={styles.secondaryButtonText}>{t("createAccount")}</Text>
             </Pressable>
             <Text style={styles.consentCopy}>By continuing, you agree to the cooperative community guidelines.</Text>
+            <Pressable onPress={() => { setAdminMode(true); setMode("login"); }} style={({ pressed }) => [styles.adminEntry, pressed && styles.pressed]}><MaterialIcons name="admin-panel-settings" size={17} color="#0F766E" /><Text style={styles.adminEntryText}>Admin sign in</Text></Pressable>
           </View>
         </View>
       </ScreenContainer>
@@ -81,16 +98,16 @@ export default function HomeScreen() {
     <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.authScroll} keyboardShouldPersistTaps="handled">
-          <Pressable onPress={() => setMode("welcome")} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+          <Pressable onPress={() => { setAdminMode(false); setMode("welcome"); }} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
             <MaterialIcons name="arrow-back" size={21} color="#102A43" />
-            <Text style={styles.backText}>Back</Text>
+            <Text style={styles.backText}>{t("back")}</Text>
           </Pressable>
           <View style={styles.authHeader}>
-            <BrandMark size="small" />
-            <Text style={styles.authTitle}>{isRegister ? "Join your local cooperative" : "Welcome back"}</Text>
-            <Text style={styles.authSubtitle}>{isRegister ? "Choose how you will use the platform." : "Sign in to continue managing your services."}</Text>
+              <BrandMark size="small" />
+            <Text style={styles.authTitle}>{adminMode ? "Administrator sign in" : isRegister ? t("joinCooperative") : t("welcomeBack")}</Text>
+            <Text style={styles.authSubtitle}>{adminMode ? "Secure access for provisioned cooperative administrators." : isRegister ? "Choose how you will use the platform." : "Sign in to continue managing your services."}</Text>
           </View>
-          {isRegister && (
+          {isRegister && !adminMode && (
             <View style={styles.roleSection}>
               <Text style={styles.fieldLabel}>I am joining as</Text>
               <View style={styles.roleStack}>
@@ -102,27 +119,32 @@ export default function HomeScreen() {
             </View>
           )}
           <View style={styles.formCard}>
-            {isRegister && <LabeledInput label="Full name" placeholder="Your name" value={name} onChangeText={setName} icon="person-outline" />}
-            <LabeledInput label="Email address" placeholder="name@example.com" value={email} onChangeText={setEmail} icon="mail-outline" keyboardType="email-address" />
-            <LabeledInput label="Password" placeholder="Enter your password" value={password} onChangeText={setPassword} icon="lock-outline" secureTextEntry />
+            {isRegister && <LabeledInput label={t("fullName")} placeholder={t("yourName")} value={name} onChangeText={setName} icon="person-outline" />}
+            <LabeledInput label={t("emailAddress")} placeholder="name@example.com" value={email} onChangeText={setEmail} icon="mail-outline" keyboardType="email-address" />
+            <LabeledInput label={t("password")} placeholder={t("enterPassword")} value={password} onChangeText={setPassword} icon="lock-outline" secureTextEntry />
             {!isRegister && (
               <Pressable onPress={async () => {
                 if (!email.trim()) { Alert.alert("Enter your email", "Add your registered email address first, then try again."); return; }
                 try { const sent = await resetPassword(email); Alert.alert("Password recovery", sent ? "A password-reset email has been sent." : "Firebase needs to be enabled before password reset is available."); } catch (error) { Alert.alert("Password recovery failed", error instanceof Error ? error.message : "Please try again."); }
               }} style={({ pressed }) => [styles.forgotLink, pressed && styles.pressed]}>
-                <Text style={styles.forgotText}>Forgot password?</Text>
+                <Text style={styles.forgotText}>{t("forgotPassword")}</Text>
               </Pressable>
             )}
-            <PrimaryButton label={isRegister ? "Create account" : "Sign in"} onPress={submit} />
+            <PrimaryButton label={isRegister ? t("createAccount") : adminMode ? "Enter admin dashboard" : t("signIn")} onPress={submit} />
+            {!adminMode && <Pressable onPress={() => { void signInWithGoogle().catch((error) => Alert.alert("Google sign-in failed", error instanceof Error ? error.message : "Please try again.")); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}>
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleButtonText}>{t("continueWithGoogle")}</Text>
+            </Pressable>}
           </View>
-          <Pressable onPress={() => setMode(isRegister ? "login" : "register")} style={({ pressed }) => [styles.switchAuth, pressed && styles.pressed]}>
-            <Text style={styles.switchAuthText}>{isRegister ? "Already have an account? " : "New here? "}<Text style={styles.switchAuthStrong}>{isRegister ? "Sign in" : "Create one"}</Text></Text>
-          </Pressable>
+          {!adminMode && <Pressable onPress={() => setMode(isRegister ? "login" : "register")} style={({ pressed }) => [styles.switchAuth, pressed && styles.pressed]}>
+            <Text style={styles.switchAuthText}>{isRegister ? t("alreadyHaveAccount") : t("newHere")}<Text style={styles.switchAuthStrong}>{isRegister ? t("signIn") : t("createOne")}</Text></Text>
+          </Pressable>}
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
+
 
 function Splash() {
   return (
@@ -154,7 +176,9 @@ function RoleCard({ role, selected, onPress }: { role: UserRole; selected: boole
 }
 
 function LabeledInput({ label, icon, ...props }: { label: string; icon: keyof typeof MaterialIcons.glyphMap } & React.ComponentProps<typeof TextInput>) {
-  return <View style={styles.inputGroup}><Text style={styles.fieldLabel}>{label}</Text><View style={styles.inputWrap}><MaterialIcons name={icon} size={20} color="#627D98" /><TextInput placeholderTextColor="#829AB1" style={styles.input} autoCapitalize="none" {...props} /></View></View>;
+  const [isVisible, setIsVisible] = useState(false);
+  const isPassword = Boolean(props.secureTextEntry);
+  return <View style={styles.inputGroup}><Text style={styles.fieldLabel}>{label}</Text><View style={styles.inputWrap}><MaterialIcons name={icon} size={20} color="#627D98" /><TextInput placeholderTextColor="#829AB1" style={styles.input} autoCapitalize="none" {...props} secureTextEntry={isPassword ? !isVisible : props.secureTextEntry} />{isPassword && <Pressable accessibilityRole="button" accessibilityLabel={isVisible ? "Hide password" : "Show password"} onPress={() => setIsVisible((visible) => !visible)} hitSlop={8} style={styles.passwordToggle}><MaterialIcons name={isVisible ? "visibility-off" : "visibility"} size={21} color="#627D98" /></Pressable>}</View></View>;
 }
 
 function PrimaryButton({ label, onPress }: { label: string; onPress: () => void }) {
@@ -201,11 +225,17 @@ const styles = StyleSheet.create({
   fieldLabel: { color: "#334E68", fontSize: 13, fontWeight: "800" },
   inputWrap: { alignItems: "center", backgroundColor: "#F7F8F6", borderColor: "#D9E2EC", borderRadius: 13, borderWidth: 1, flexDirection: "row", gap: 10, height: 52, paddingHorizontal: 14 },
   input: { color: "#102A43", flex: 1, fontSize: 15, height: "100%" },
+  passwordToggle: { alignItems: "center", justifyContent: "center", minHeight: 36, minWidth: 36 },
   forgotLink: { alignSelf: "flex-end", minHeight: 28, justifyContent: "center" },
   forgotText: { color: "#0F766E", fontSize: 13, fontWeight: "800" },
   switchAuth: { alignItems: "center", marginTop: 22, minHeight: 40, justifyContent: "center" },
   switchAuthText: { color: "#627D98", fontSize: 14 },
   switchAuthStrong: { color: "#0F766E", fontWeight: "800" },
+  googleButton: { alignItems: "center", borderColor: "#D9E2EC", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, height: 52, justifyContent: "center", marginTop: 10 },
+  googleIcon: { color: "#4285F4", fontSize: 20, fontWeight: "900" },
+  googleButtonText: { color: "#102A43", fontSize: 14, fontWeight: "800" },
+  adminEntry: { alignItems: "center", flexDirection: "row", gap: 6, justifyContent: "center", marginTop: 16, minHeight: 38 },
+  adminEntryText: { color: "#0F766E", fontSize: 12, fontWeight: "800" },
   signedInPage: { flex: 1 },
   topbar: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 8 },
   signOutButton: { alignItems: "center", flexDirection: "row", gap: 6, minHeight: 44 },
