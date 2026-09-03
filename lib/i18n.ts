@@ -33,8 +33,8 @@ export function useI18n() { const context = useContext(I18nContext); if (!contex
 export function GlobalLanguagePicker() {
   const { language, setLanguage, t } = useI18n();
   const [open, setOpen] = useState(false);
-  return React.createElement(View, { style: { marginVertical: 10, zIndex: 20 } },
-    React.createElement(Pressable, { onPress: () => setOpen((value) => !value), style: { alignSelf: "flex-start", borderColor: "#A8D5CE", borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#FFFFFF" } },
+  return React.createElement(View, { style: { position: "absolute", top: 42, right: 14, zIndex: 100, elevation: 100 } },
+    React.createElement(Pressable, { onPress: () => setOpen((value) => !value), style: { alignSelf: "flex-end", borderColor: "#A8D5CE", borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#FFFFFF", shadowColor: "#102A43", shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 } },
       React.createElement(Text, { style: { color: "#0F766E", fontWeight: "800" } }, `${t("language", "Language")}: ${languageNames[language]}`)),
     open && React.createElement(View, { style: { backgroundColor: "#FFFFFF", borderColor: "#D9E2EC", borderRadius: 12, borderWidth: 1, marginTop: 6, padding: 6, gap: 2 } },
       Object.entries(languageNames).map(([code, name]) => React.createElement(Pressable, { key: code, onPress: () => { setLanguage(code as LanguageCode); setOpen(false); }, style: { paddingHorizontal: 10, paddingVertical: 9, backgroundColor: language === code ? "#CCFBF1" : "#FFFFFF", borderRadius: 8 } }, React.createElement(Text, { style: { color: "#102A43", fontWeight: language === code ? "800" : "500" } }, name))))
