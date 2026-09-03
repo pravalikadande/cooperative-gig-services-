@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithCredential, signInWithPopup, signOut as signOutFromFirebase } from "firebase/auth";
@@ -27,9 +28,11 @@ const SessionContext = createContext<SessionState | null>(null);
 const SESSION_KEY = "cooperative-gig-services/session";
 const PROFILE_KEY_PREFIX = "cooperative-gig-services/profile/";
 const ADMIN_EMAIL = "siddhardhar471@gmail.com";
-const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || "unconfigured-android-client.apps.googleusercontent.com";
-const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "unconfigured-ios-client.apps.googleusercontent.com";
-const googleAuthConfigured = Platform.OS === "web" || Boolean(process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
+const googleExtra = (Constants.expoConfig?.extra?.google ?? {}) as { androidClientId?: string; iosClientId?: string; webClientId?: string };
+const googleAndroidClientId = googleExtra.androidClientId || process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || "";
+const googleIosClientId = googleExtra.iosClientId || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "";
+const googleWebClientId = googleExtra.webClientId || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "";
+const googleAuthConfigured = Platform.OS === "web" || Boolean(googleAndroidClientId || googleIosClientId);
 
 function friendlyAccountError(error: unknown) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
@@ -50,7 +53,7 @@ export function GigSessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
     // Firebase signInWithPopup handles web auth directly; AuthSession still requires a defined value during hook initialization.
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || (Platform.OS === "web" ? "web-only-firebase-popup.apps.googleusercontent.com" : undefined),
+    webClientId: googleWebClientId || (Platform.OS === "web" ? "web-only-firebase-popup.apps.googleusercontent.com" : undefined),
     androidClientId: googleAndroidClientId,
     iosClientId: googleIosClientId,
   });

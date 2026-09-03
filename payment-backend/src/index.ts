@@ -123,5 +123,16 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 app.post("/createRazorpayOrderHttp", authenticate, createRazorpayOrder);
 app.post("/verifyRazorpayPayment", authenticate, verifyPayment);
 app.post("/razorpayWebhook", webhook);
+app.get("/checkout", (req, res) => {
+  const orderId = String(req.query.orderId || "");
+  const keyId = String(req.query.keyId || "");
+  const amount = String(req.query.amount || "");
+  const currency = String(req.query.currency || "INR");
+  const bookingId = String(req.query.bookingId || "");
+  const token = String(req.query.token || "");
+  if (!orderId || !keyId || !amount || !bookingId || !token) return res.status(400).send("Missing checkout details");
+  const safe = (value: string) => value.replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\\"": "&quot;", "'": "&#39;" } as Record<string, string>)[character] || character);
+  res.type("html").send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cooperative Gig Payment</title><script src="https://checkout.razorpay.com/v1/checkout.js"></script><style>body{font-family:Arial,sans-serif;padding:32px;color:#102a43;text-align:center}button{background:#0f766e;color:#fff;border:0;border-radius:10px;padding:14px 24px;font-size:16px}</style></head><body><h2>Complete payment</h2><p>Booking: ${safe(bookingId)}</p><button id="pay">Pay now</button><p id="status"></p><script>const status=document.getElementById('status');document.getElementById('pay').onclick=()=>{const options={key:'${safe(keyId)}',amount:'${safe(amount)}',currency:'${safe(currency)}',name:'Cooperative Gig Services',description:'Booking ${safe(bookingId)}',order_id:'${safe(orderId)}',handler:async function(response){status.textContent='Verifying payment...';const result=await fetch('/verifyRazorpayPayment',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer ${safe(token)}'},body:JSON.stringify({...response,bookingId:'${safe(bookingId)}'})});status.textContent=result.ok?'Payment successful. You can close this window.':'Payment verification failed.'},modal:{ondismiss:()=>{status.textContent='Payment window closed.'}}};new Razorpay(options).open()};</script></body></html>`);
+});
 const port = Number(process.env.PORT || 8080);
 app.listen(port, () => console.log(`Payment backend listening on ${port}`));

@@ -349,7 +349,7 @@ export type PaymentOrderResponse = {
  * Starts a gateway order. The server reads the booking amount and creates the
  * payment record; the client never writes payment status or invoice fields.
  */
-export async function createPaymentAttempt(input: Pick<PaymentRecord, "bookingId" | "customerId" | "workerId" | "amount" | "gateway">): Promise<string> {
+export async function createPaymentAttempt(input: Pick<PaymentRecord, "bookingId" | "customerId" | "workerId" | "amount" | "gateway">): Promise<PaymentOrderResponse> {
   const endpoint = process.env.EXPO_PUBLIC_CREATE_PAYMENT_ORDER_URL;
   const currentUser = firebaseAuth?.currentUser;
   if (!endpoint) throw new Error("Payment service URL is not configured.");
@@ -365,7 +365,7 @@ export async function createPaymentAttempt(input: Pick<PaymentRecord, "bookingId
   if (!response.ok || typeof body.paymentRecordId !== "string") {
     throw new Error(body.error || "Could not create payment order.");
   }
-  return body.paymentRecordId;
+  return body as PaymentOrderResponse;
 }
 
 export function subscribeToPayments(userId: string, role: "customer" | "worker", onChange: (items: PaymentRecord[]) => void): Unsubscribe {

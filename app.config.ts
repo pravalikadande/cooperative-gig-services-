@@ -106,6 +106,11 @@ const config: ExpoConfig = {
       messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? "",
       appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? "",
     },
+    google: {
+      androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? "",
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? "",
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? "",
+    },
   },
   plugins: [
     "expo-router",
