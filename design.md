@@ -1,52 +1,51 @@
-# Cooperative Gig Services — Mobile Interface Plan
+# Cooperative Gig Localization — Mobile Interface Plan
 
-## Product Direction
+## Product intent
 
-Cooperative Gig Services is a portrait-first marketplace that connects residents with vetted local cooperative workers. The interface prioritizes one-handed use: important actions sit in the lower half of each screen, standard 44-point touch targets are maintained, and status-changing operations use clear confirmation feedback. The visual language should feel native on iOS and familiar on Android: generous whitespace, rounded 16–24 point cards, a restrained elevation system, and concise, action-oriented labels.
+Cooperative Gig connects customers and workers through a simple, localized mobile experience. The interface is designed for portrait orientation and one-handed use, with consistent copy in the selected language and clear profile-completion prompts.
 
-## Screen List and Primary Functionality
+## Screen list and functionality
 
-| Screen | Primary content | Key actions |
-|---|---|---|
-| Splash | Logo, product name, concise local-services tagline, loading state | Route to authentication or saved session |
-| Login | Email and password fields, password recovery link | Sign in, open registration, initiate password reset |
-| Register and role selection | Name, contact details, password, customer/worker role cards | Create account, choose role |
-| Customer home | Greeting, location chip, search, service categories, nearby workers, recent bookings | Search, choose service, open worker or booking detail |
-| Services | Search field, service category filters, service list | Filter and select a service |
-| Nearby workers | Filter controls and worker cards with distance, availability, rating, experience, and starting price | Open a worker profile |
-| Worker profile | Identity, verified state, skills, rating, reviews, service area, availability, and biography | Start booking; message/call only with a valid booking |
-| Booking form | Service, date/time, address/map, description, optional photo, estimate | Confirm booking |
-| Booking confirmation/detail | Reference number, worker, service and status timeline | View booking, message worker, call worker when valid |
-| My bookings | Upcoming, active, completed, and cancelled sections | Open/cancel eligible booking, rate completed service |
-| Chat | Recipient identity/status, chronological messages, timestamps, read state, input composer | Send messages for accepted/active bookings only |
-| Worker dashboard | Online toggle, earnings summary, request count, job-state summaries | Open requests, jobs, earnings, or profile |
-| Job requests | Customer, service, schedule, address and brief | Accept or reject request |
-| Active job | Job facts, customer information, status tracker | Message/call, start and complete job |
-| Earnings | Today, week, month, completed jobs, history | Review earning periods and job records |
-| Worker profile editor | Personal information, photo, skills, service area, availability | Update profile |
-| Rating and review | Five-star selector and optional written review | Submit one review per completed booking |
-| Admin overview | Customer/worker totals, booking performance, complaints and reports | Open management lists; verify workers |
-
-## Key User Flows
-
-| User | Flow |
+| Screen | Primary content and functionality |
 |---|---|
-| Customer | Splash → Login/register → Customer home → Select service → Nearby workers → Worker profile → Book service → Confirmation → Chat/call after valid booking → Completed service → Rating |
-| Worker | Splash → Login/register → Create worker profile → Worker dashboard → Job request → Accept/reject → Active job → Chat/call → Start → Complete → Earnings updated |
-| Admin | Login with admin role → Overview → Workers → Verify/report action → Bookings or complaints → Review platform status |
+| Home / Dashboard | Greeting, role-aware shortcuts, current activity, and concise localized status messages. |
+| Customer Marketplace | Search and browse worker/service cards, localized categories, and detail navigation. |
+| Worker Directory | Browse requests or listings with localized filters and actions. |
+| Booking / Request Detail | Details, contact context, status, and primary booking/request actions. |
+| Profile | Identity, role, phone number, completion state, and the only language selector. |
+| Edit Profile | Name, phone number, role-specific details, save feedback, and validation. |
+| Appearance Settings | Light/dark controls and localized setting descriptions. |
+| Authentication / Callback | Sign-in and OAuth callback states through the shared localization layer. |
 
-## Color Choices
+## Key user flows
 
-| Purpose | Color | Rationale |
+### Change language
+
+The user opens **Profile**, taps the dedicated **Language** card, selects a supported language in a compact sheet, and sees the app copy refresh immediately. The preference is persisted locally. Language controls are not repeated on other screens.
+
+### Complete a missing phone number
+
+A customer or worker without a phone number sees a prominent, non-blocking **Add phone number** alert on **Profile**. The alert opens **Edit Profile**, where the user enters and saves a valid number. After the profile state refreshes, the alert disappears and localized success feedback is shown.
+
+### Browse and request work
+
+The user opens the marketplace or directory, searches or selects a localized category, opens a detail card, reviews the information, and taps the localized primary action. Confirmation and validation states use the selected language consistently.
+
+## Interaction and layout rules
+
+Use large touch targets, high-contrast text, bottom-reachable primary actions, clear cards, native alerts/sheets, and safe-area-aware portrait layouts. Phone completion is communicated inline on Profile rather than through repeated interruptions.
+
+## Color choices
+
+| Token | Color | Use |
 |---|---|---|
-| Cooperative teal | `#0F766E` | Communicates trust, local connection, and service reliability; used for primary actions and active states. |
-| Deep ink | `#102A43` | Provides high-contrast headings and navigation labels. |
-| Warm canvas | `#F7F8F6` | Gives screens a calm, community-oriented background instead of stark white. |
-| White surface | `#FFFFFF` | Keeps cards and forms clear against the canvas. |
-| Signal amber | `#D97706` | Indicates pending requests and attention-needed status. |
-| Success green | `#15803D` | Indicates online, accepted, confirmed, and completed states. |
-| Service coral | `#C2410C` | Reserved for destructive actions and important warnings. |
+| Primary teal | `#0A7EA4` | Main actions and selected states |
+| Ink | `#11181C` | Primary light-mode text |
+| Canvas | `#FFFFFF` | Light-mode background |
+| Surface | `#F5F5F5` | Cards and grouped settings |
+| Border | `#E5E7EB` | Dividers and outlines |
+| Warning amber | `#F59E0B` | Missing-phone alert accent |
+| Error red | `#EF4444` | Validation and failure |
+| Success green | `#22C55E` | Saved/completed profile state |
 
-## Interaction Principles
-
-The main bottom navigation changes by role. Customers receive Home, Explore, Bookings, and Profile. Workers receive Dashboard, Requests, Jobs, and Profile. Administrative views use a simple management tab structure. Booking status is always represented with both a text label and a color-coded badge, so no state relies on color alone. Message and call entry points remain disabled with explanatory text until the booking reaches a valid accepted or active state.
+Dark mode uses `#151718` canvas, `#1E2022` surfaces, and `#ECEDEE` primary text while retaining semantic accent colors.

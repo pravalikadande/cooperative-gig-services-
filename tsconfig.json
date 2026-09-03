@@ -25,6 +25,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "firebase/functions"
+    "firebase/functions",
+    "payment-backend"
   ]
 }
