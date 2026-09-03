@@ -38,7 +38,7 @@ export async function readFirebaseUser(firebaseUser: User): Promise<AppUser | nu
     location: data.location,
     federationId: typeof data.federationId === "string" ? data.federationId : undefined,
     societyId: typeof data.societyId === "string" ? data.societyId : undefined,
-    language: data.language === "te" || data.language === "hi" ? data.language : "en",
+    language: ["en", "te", "hi", "mr", "ta", "bn"].includes(data.language) ? data.language as LanguageCode : "en",
     createdAt: data.createdAt?.toDate?.().toISOString?.() || new Date().toISOString(),
   };
 }
@@ -455,7 +455,7 @@ export function subscribeToUserDirectory(onChange: (items: AppUser[]) => void): 
         location: data.location,
         federationId: typeof data.federationId === "string" ? data.federationId : undefined,
         societyId: typeof data.societyId === "string" ? data.societyId : undefined,
-        language: data.language === "te" || data.language === "hi" ? data.language : "en",
+        language: ["en", "te", "hi", "mr", "ta", "bn"].includes(data.language) ? data.language as LanguageCode : "en",
         createdAt: data.createdAt?.toDate?.().toISOString?.() || new Date().toISOString(),
       } satisfies AppUser;
     });

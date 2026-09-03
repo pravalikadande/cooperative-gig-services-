@@ -9,7 +9,7 @@ import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { GigSessionProvider } from "@/lib/gig/session-context";
-import { GlobalLanguagePicker, I18nProvider } from "@/lib/i18n";
+import { I18nProvider } from "@/lib/i18n";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -93,7 +93,6 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="oauth/callback" />
           </Stack>
-          <GlobalLanguagePicker />
           <StatusBar style="auto" />
           </GigSessionProvider>
         </QueryClientProvider>
