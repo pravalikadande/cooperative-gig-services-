@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import type { LanguageCode } from "@/lib/gig/models";
+import { phraseTranslations } from "@/lib/phrase-translations";
 
 const STORAGE_KEY = "cgs.language";
 const listeners = new Set<() => void>();
@@ -26,7 +27,7 @@ const I18nContext = createContext<I18nValue | null>(null);
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const language = useSyncExternalStore(subscribeToGlobalLanguage, getGlobalLanguage, getGlobalLanguage);
   useEffect(() => { void AsyncStorage.getItem(STORAGE_KEY).then((value) => { if (value && value in languageNames) { globalLanguage = value as LanguageCode; notify(); } }); }, []);
-  const value = useMemo<I18nValue>(() => ({ language, setLanguage: setGlobalLanguage, t: (key, fallback) => dictionary[language][key] || fallback || key }), [language]);
+  const value = useMemo<I18nValue>(() => ({ language, setLanguage: setGlobalLanguage, t: (key, fallback) => dictionary[language][key] || (language === "en" ? (phraseTranslations[key]?.["te"] ? key : (fallback || key)) : (phraseTranslations[key]?.[language] || fallback || key)) }), [language]);
   return React.createElement(I18nContext.Provider, { value }, children);
 }
 export function useI18n() { const context = useContext(I18nContext); if (!context) throw new Error("useI18n must be used inside I18nProvider"); return context; }

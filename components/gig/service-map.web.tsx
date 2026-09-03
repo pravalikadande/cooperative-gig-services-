@@ -1,8 +1,9 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { LocalizedText as Text } from "@/lib/i18n";
 
 export function ServiceMap({ label }: { latitude: number; longitude: number; label: string }) {
-  return <View style={styles.mapFallback}><View style={styles.pin}><MaterialIcons name="location-on" size={24} color="#0F766E" /></View><Text style={styles.label}>{label}</Text><Text style={styles.copy}>Interactive map appears in the Android or iOS build.</Text></View>;
+  return <View style={styles.mapFallback}><View style={styles.pin}><MaterialIcons name="location-on" size={24} color="#0F766E" /></View><Text style={styles.label}>{label}</Text><Text translationKey="Interactive map appears in the Android or iOS build." style={styles.copy}>Interactive map appears in the Android or iOS build.</Text></View>;
 }
 
 const styles = StyleSheet.create({

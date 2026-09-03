@@ -1,5 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { LocalizedText as Text } from "@/lib/i18n";
 
 import { useColors } from "@/hooks/use-colors";
 import { useThemeContext } from "@/lib/theme-provider";
@@ -21,8 +22,8 @@ export function AppearanceSetting() {
           <MaterialIcons name="palette" size={20} color={colors.primary} />
         </View>
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Appearance</Text>
-          <Text style={[styles.subtitle, { color: colors.muted }]}>Choose how Cooperative Gig Services looks on this device.</Text>
+          <Text translationKey="Appearance" style={[styles.title, { color: colors.foreground }]}>Appearance</Text>
+          <Text translationKey="Choose how Cooperative Gig Services looks on this device." style={[styles.subtitle, { color: colors.muted }]}>Choose how Cooperative Gig Services looks on this device.</Text>
         </View>
       </View>
       <View style={styles.options}>
@@ -43,8 +44,8 @@ export function AppearanceSetting() {
             >
               <MaterialIcons name={option.icon} size={19} color={selected ? colors.primary : colors.muted} />
               <View style={styles.copy}>
-                <Text style={[styles.optionLabel, { color: selected ? colors.primary : colors.foreground }]}>{option.label}</Text>
-                <Text style={[styles.optionDescription, { color: colors.muted }]}>{option.description}</Text>
+                <Text translationKey={option.label} style={[styles.optionLabel, { color: selected ? colors.primary : colors.foreground }]}>{option.label}</Text>
+                <Text translationKey={option.description} style={[styles.optionDescription, { color: colors.muted }]}>{option.description}</Text>
               </View>
               <MaterialIcons name={selected ? "radio-button-checked" : "radio-button-unchecked"} size={20} color={selected ? colors.primary : colors.muted} />
             </Pressable>

@@ -32,7 +32,7 @@ const googleExtra = (Constants.expoConfig?.extra?.google ?? {}) as { androidClie
 const googleAndroidClientId = googleExtra.androidClientId || process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || "";
 const googleIosClientId = googleExtra.iosClientId || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "";
 const googleWebClientId = googleExtra.webClientId || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "";
-const googleAuthConfigured = Platform.OS === "web" || Boolean(googleAndroidClientId || googleIosClientId);
+const googleAuthConfigured = Platform.OS === "web" || Boolean((Platform.OS === "android" ? googleAndroidClientId : googleIosClientId) && googleWebClientId);
 
 function friendlyAccountError(error: unknown) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
@@ -51,7 +51,7 @@ function friendlyAccountError(error: unknown) {
 export function GigSessionProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<AppUser | null>(null);
-  const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
+  const [googleRequest, googleResponse, promptGoogleAsync] = Google.useIdTokenAuthRequest({
     // Firebase signInWithPopup handles web auth directly; AuthSession still requires a defined value during hook initialization.
     webClientId: googleWebClientId || (Platform.OS === "web" ? "web-only-firebase-popup.apps.googleusercontent.com" : undefined),
     androidClientId: googleAndroidClientId,
@@ -103,7 +103,7 @@ export function GigSessionProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     if (!firebaseAuth || !isFirebaseConfigured) throw new Error("Configure Firebase before using Google sign-in.");
-    if (Platform.OS !== "web" && !googleAuthConfigured) throw new Error("Google sign-in is not configured for this Android/iOS build. Use email sign-in or add the Google client ID to .env.");
+    if (Platform.OS !== "web" && !googleAuthConfigured) throw new Error("Google sign-in is not configured for this build. Add the Android/iOS and Web Google client IDs to EAS preview variables, verify the package SHA-1, and rebuild the APK.");
     try {
       if (Platform.OS === "web") {
         const credential = await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
@@ -113,7 +113,7 @@ export function GigSessionProvider({ children }: { children: ReactNode }) {
       if (!googleRequest) throw new Error("Google sign-in is not configured. Add the Google client IDs to .env and rebuild the app.");
       const result = await promptGoogleAsync();
       if (result.type === "cancel" || result.type === "dismiss" || result.type === "locked") return;
-      if (result.type !== "success") throw new Error("Google sign-in was not completed.");
+      if (result.type !== "success") throw new Error("Google sign-in was not completed. If Google says Access blocked, add this Gmail as a test user in the OAuth consent screen and verify the Android package/SHA-1.");
     } catch (error) {
       throw new Error(friendlyAccountError(error));
     }
