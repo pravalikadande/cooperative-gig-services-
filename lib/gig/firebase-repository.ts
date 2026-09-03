@@ -279,10 +279,17 @@ export async function sendBookingMessage(input: Omit<ChatMessage, "id" | "timest
 
 export async function submitReview(input: Omit<Review, "id" | "createdAt">) {
   const database = requireFirestore();
-  await setDoc(doc(database, "reviews", input.bookingId), {
-    ...input,
-    createdAt: serverTimestamp(),
-  });
+  if (!input.bookingId || !input.customerId || !input.workerId) throw new Error("Review details are incomplete.");
+  if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) throw new Error("Choose a rating from one to five stars.");
+  const bookingSnapshot = await getDoc(doc(database, "bookings", input.bookingId));
+  if (!bookingSnapshot.exists()) throw new Error("This booking could not be found.");
+  const booking = bookingSnapshot.data();
+  if (booking.customerId !== input.customerId) throw new Error("Only the customer who made the booking can review it.");
+  if (booking.status !== "completed") throw new Error("Reviews are available after the service is completed.");
+  const reviewRef = doc(database, "reviews", input.bookingId);
+  const existing = await getDoc(reviewRef);
+  if (existing.exists()) throw new Error("A review has already been submitted for this booking.");
+  await setDoc(reviewRef, { ...input, comment: input.comment?.trim() || "", createdAt: serverTimestamp() });
 }
 
 export async function uploadImage(uri: string, path: `profileImages/${string}` | `bookingImages/${string}`) {

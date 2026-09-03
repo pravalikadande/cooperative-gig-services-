@@ -12,7 +12,8 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export const PAYMENT_METHODS = ["razorpay", "upi", "offline", "card", "netbanking", "wallet", "cash_on_service"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
-export type LanguageCode = "en" | "te" | "hi";
+export const LANGUAGE_CODES = ["en", "te", "hi", "mr", "ta", "bn"] as const;
+export type LanguageCode = (typeof LANGUAGE_CODES)[number];
 
 export const BOOKING_STATUSES = [
   "pending",
