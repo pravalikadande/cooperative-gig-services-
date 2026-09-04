@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "725046645509",
+    "project_id": "cooperative-gig-services",
+    "storage_bucket": "cooperative-gig-services.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:725046645509:android:f4fa9f49b248798b14dd6c",
+        "android_client_info": {
+          "package_name": "com.app.cooperativegigservicesv2"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "725046645509-n2td5079gid6gkuv1ms3ia9t36flnun7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.app.cooperativegigservicesv2",
+            "certificate_hash": "760446c2744e37250f222ab5d790a612fde018f9"
+          }
+        },
+        {
+          "client_id": "725046645509-m2hl22t7l9b7q7udq4rv5t38q2q79fa9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBE9PzONyRofCNQG8LQHURxICfPV__jxik"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "725046645509-m2hl22t7l9b7q7udq4rv5t38q2q79fa9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
