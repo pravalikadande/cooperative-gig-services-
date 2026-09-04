@@ -115,6 +115,8 @@ const config: ExpoConfig = {
     },
   },
   plugins: [
+      "@react-native-google-signin/google-signin",
+
     "expo-router",
     "expo-font",
     "expo-web-browser",
