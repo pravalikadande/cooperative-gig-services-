@@ -2,7 +2,7 @@
 
 The app now routes visible text and alert dialogs through the selected-language localization layer. The shared translator supports direct phrases, embedded phrases in interpolated strings, localized text inputs, OAuth callback status messages, and multi-button alerts.
 
-The customer, worker, admin, authentication, OAuth callback, map fallback, appearance setting, and shared collapsible UI paths were updated so they no longer bypass localization with native `Text` or raw `Alert.alert` calls. The phrase catalog was expanded for the remaining customer-facing UI copy in Telugu, Hindi, Marathi, Tamil, and Bengali.
+The customer, worker, admin, authentication, OAuth callback, map fallback, appearance setting, and shared collapsible UI paths were updated so they no longer bypass localization with native `Text` or raw `Alert.alert` calls. The customer home service cards, greetings, search label, worker status, price labels, and bottom navigation are now translated. The admin dashboard header now includes a working global language button, and its portal heading and navigation labels follow the selected language. The phrase catalog was expanded for the remaining customer-facing UI copy in Telugu, Hindi, Marathi, Tamil, and Bengali.
 
 Verification completed:
 
