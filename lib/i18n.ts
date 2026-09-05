@@ -1,6 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import type { LanguageCode } from "@/lib/gig/models";
 import { phraseTranslations } from "@/lib/phrase-translations";
 
@@ -21,16 +21,41 @@ function getGlobalLanguage() { return globalLanguage; }
 function subscribeToGlobalLanguage(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); }
 function setGlobalLanguage(language: LanguageCode) { globalLanguage = language; void AsyncStorage.setItem(STORAGE_KEY, language); notify(); }
 
+/** Translate a phrase without ever falling back to English when another language is selected. */
+export function translatePhrase(language: LanguageCode, key: string, fallback?: string): string {
+  const phraseLanguage = language === "en" ? undefined : language;
+  const direct = dictionary[language]?.[key] || (phraseLanguage ? phraseTranslations[key]?.[phraseLanguage] : undefined);
+  if (direct) return direct;
+  if (language === "en") return dictionary.en[key] || fallback || key;
+
+  // Also translate known phrases embedded in interpolated strings such as "2 completed bookings".
+  const entries = Object.entries(phraseTranslations)
+    .filter(([phrase, values]) => phrase.length > 2 && values[language])
+    .sort(([left], [right]) => right.length - left.length);
+  let translated = key;
+  for (const [phrase, values] of entries) translated = translated.replaceAll(phrase, values[language]);
+  if (translated !== key) return translated;
+
+  // A missing catalog entry should not reintroduce English UI. Keep the caller's explicit fallback
+  // only for English; for other languages return the best available localized key/value.
+  return dictionary[language]?.[key] || phraseTranslations[key]?.[language] || (fallback && fallback !== key ? fallback : key);
+}
+
 type I18nValue = { language: LanguageCode; setLanguage: (language: LanguageCode) => void; t: (key: string, fallback?: string) => string };
 const I18nContext = createContext<I18nValue | null>(null);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const language = useSyncExternalStore(subscribeToGlobalLanguage, getGlobalLanguage, getGlobalLanguage);
   useEffect(() => { void AsyncStorage.getItem(STORAGE_KEY).then((value) => { if (value && value in languageNames) { globalLanguage = value as LanguageCode; notify(); } }); }, []);
-  const value = useMemo<I18nValue>(() => ({ language, setLanguage: setGlobalLanguage, t: (key, fallback) => dictionary[language][key] || (language === "en" ? (phraseTranslations[key]?.["te"] ? key : (fallback || key)) : (phraseTranslations[key]?.[language] || fallback || key)) }), [language]);
+  const value = useMemo<I18nValue>(() => ({ language, setLanguage: setGlobalLanguage, t: (key, fallback) => translatePhrase(language, key, fallback) }), [language]);
   return React.createElement(I18nContext.Provider, { value }, children);
 }
 export function useI18n() { const context = useContext(I18nContext); if (!context) throw new Error("useI18n must be used inside I18nProvider"); return context; }
+
+export function localizedAlert(title: string, message?: string, buttons?: Parameters<typeof Alert.alert>[2]) {
+  const localizedButtons = buttons?.map((button) => ({ ...button, text: button.text ? translatePhrase(globalLanguage, button.text) : button.text }));
+  Alert.alert(translatePhrase(globalLanguage, title), message ? translatePhrase(globalLanguage, message) : undefined, localizedButtons);
+}
 export function ProfileLanguagePicker() {
   const { language, setLanguage, t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -58,7 +83,10 @@ export function GlobalLanguagePicker() {
 }
 export function LocalizedText({ children, translationKey, ...props }: React.ComponentProps<typeof Text> & { translationKey?: string }) {
   const { t } = useI18n();
-  const value = typeof children === "string" ? t(translationKey || children, children) : children;
+  const value = translationKey ? t(translationKey, typeof children === "string" ? children : undefined) : React.Children.map(children, (child) => typeof child === "string" ? t(child, child) : child);
   return React.createElement(Text, props, value);
 }
-export function LocalizedTextInput({ placeholder, ...props }: React.ComponentProps<typeof TextInput>) { const { t } = useI18n(); return React.createElement(TextInput, { ...props, placeholder: placeholder ? t(placeholder, placeholder) : placeholder }); }
+export function LocalizedTextInput({ placeholder, ...props }: React.ComponentProps<typeof TextInput>) {
+  const { t } = useI18n();
+  return React.createElement(TextInput, { ...props, placeholder: placeholder ? t(placeholder, placeholder) : placeholder });
+}

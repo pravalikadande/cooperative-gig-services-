@@ -4,7 +4,8 @@ import * as Auth from "@/lib/_core/auth";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Text } from "react-native";
+import { ActivityIndicator } from "react-native";
+import { LocalizedText as Text } from "@/lib/i18n";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function OAuthCallback() {

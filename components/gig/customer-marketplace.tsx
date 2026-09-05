@@ -4,7 +4,7 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, BackHandler, Image, Platform, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { BackHandler, Image, Platform, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { isBookingContactEligible, bookingStatusLabel, canLeaveReview } from "@/lib/gig/booking-lifecycle";
 import { createBooking, createPaymentAttempt, sendBookingMessage, subscribeToBookings, subscribeToMessages, subscribeToWorkerDirectory, submitReview } from "@/lib/gig/firebase-repository";
@@ -13,7 +13,7 @@ import type { AppUser, Booking, BookingStatus, ChatMessage, PaymentMethod, Servi
 import { ServiceMap } from "@/components/gig/service-map";
 import { AppearanceSetting } from "@/components/gig/appearance-setting";
 import { useColors } from "@/hooks/use-colors";
-import { LocalizedText, LocalizedTextInput, ProfileLanguagePicker, useI18n } from "@/lib/i18n";
+import { LocalizedText, LocalizedTextInput, ProfileLanguagePicker, localizedAlert, useI18n } from "@/lib/i18n";
 
 const Text = LocalizedText;
 const TextInput = LocalizedTextInput;
@@ -120,13 +120,13 @@ export function CustomerMarketplace({ user, onSaveProfile, onSignOut }: { user: 
     try {
       const result = await requestCurrentServiceLocation();
       if (!result.ok) {
-        if (!silent) Alert.alert("Location unavailable", result.message);
+        if (!silent) localizedAlert("Location unavailable", result.message);
         return;
       }
       applyLocation({ label: result.label, latitude: result.latitude, longitude: result.longitude });
       await AsyncStorage.removeItem(PREFERRED_LOCATION_KEY);
     } catch {
-      if (!silent) Alert.alert("Location unavailable", "We could not read your current location. Choose a city manually instead.");
+      if (!silent) localizedAlert("Location unavailable", "We could not read your current location. Choose a city manually instead.");
     }
   };
 
@@ -199,7 +199,7 @@ export function CustomerMarketplace({ user, onSaveProfile, onSignOut }: { user: 
       setCreatedBooking({ id, status: "pending", date: bookingDate.toISOString().slice(0, 10), time: bookingTime });
       setView("confirmation");
     } catch (error) {
-      Alert.alert("Booking not sent", error instanceof Error ? error.message : "We could not create this booking. Please try again.");
+      localizedAlert("Booking not sent", error instanceof Error ? error.message : "We could not create this booking. Please try again.");
     } finally {
       setIsBookingSubmitting(false);
     }
@@ -226,7 +226,7 @@ export function CustomerMarketplace({ user, onSaveProfile, onSignOut }: { user: 
       <View style={[styles.topbar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]} >
         <View style={styles.logoSmall}><MaterialIcons name="handshake" size={19} color="#FFFFFF" /></View>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Choose service location" activeOpacity={0.72} onPress={() => setIsLocationPickerOpen((open) => !open)} style={styles.location}><MaterialIcons name="location-on" size={17} color="#0F766E" /><Text numberOfLines={1} style={styles.locationText}>{headerLocation.label}</Text><MaterialIcons name={isLocationPickerOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} size={17} color="#627D98" /></TouchableOpacity>
-        <Pressable onPress={() => Alert.alert("Notifications", "No new service updates yet.")} style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}><MaterialIcons name="notifications-none" size={22} color="#102A43" /></Pressable>
+        <Pressable onPress={() => localizedAlert("Notifications", "No new service updates yet.")} style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}><MaterialIcons name="notifications-none" size={22} color="#102A43" /></Pressable>
       </View>
       {isLocationPickerOpen && <View style={styles.locationPicker}><Text style={styles.locationPickerTitle}>Service location</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Use my current location" activeOpacity={0.72} onPress={() => { setIsLocationPickerOpen(false); detectCurrentLocation(); }} style={styles.locationCurrentRow}><MaterialIcons name="my-location" size={19} color="#0F766E" /><View style={styles.flex}><Text style={styles.locationCurrentTitle}>Use my current location</Text><Text style={styles.locationCurrentCopy}>Ask device permission and update nearby services</Text></View></TouchableOpacity><Text style={styles.locationPickerHint}>Or choose a city manually</Text><View style={styles.locationOptions}>{manualLocations.map((location) => <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Choose ${location.label}`} activeOpacity={0.72} key={location.label} onPress={() => { applyLocation(location, true); setIsLocationPickerOpen(false); }} style={[styles.locationOption, headerLocation.label === location.label && styles.locationOptionActive]}><Text style={[styles.locationOptionText, headerLocation.label === location.label && styles.locationOptionTextActive]}>{location.label}</Text></TouchableOpacity>)}</View></View>}
       <ScrollView contentContainerStyle={[styles.scroll, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
@@ -235,7 +235,7 @@ export function CustomerMarketplace({ user, onSaveProfile, onSignOut }: { user: 
         {view === "worker" && <WorkerView worker={selectedWorker} onBack={() => setView("explore")} onBook={() => setView("booking")} />}
         {view === "booking" && <BookingView worker={selectedWorker} service={selectedService} description={draftDescription} setDescription={setDraftDescription} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} serviceLocation={serviceLocation} onUseCurrentLocation={useCurrentLocation} bookingImageUri={bookingImageUri} onChooseImage={chooseBookingImage} bookingDate={bookingDate} setBookingDate={setBookingDate} bookingTime={bookingTime} setBookingTime={setBookingTime} onBack={() => setView("worker")} onConfirm={() => { void confirmBooking(); }} isSubmitting={isBookingSubmitting} />}
         {view === "confirmation" && createdBooking && <ConfirmationView booking={createdBooking} worker={selectedWorker} service={selectedService} onBookings={() => setView("bookings")} />}
-        {view === "bookings" && <BookingsView createdBooking={createdBooking} liveBookings={liveBookings} selectedWorker={selectedWorker} selectedService={selectedService} availableWorkers={directoryWorkers} onWorker={openWorker} onMessage={(booking) => { setActiveCustomerChat(booking); setView("chat"); }} onCall={(booking) => { void openBookingCall(booking.workerPhone ?? directoryWorkers.find((worker) => worker.userId === booking.workerId)?.phone); }} reviewedBookingIds={reviewedBookingIds} paidBookingIds={paidBookingIds} onReview={(booking) => { setReviewBooking(booking); setView("review"); }} onPay={async (booking) => { try { if (booking.paymentMethod === "cash_on_service") { Alert.alert("Cash payment", "Please pay the worker after the service is completed."); return; } const order = await createPaymentAttempt({ bookingId: booking.id, customerId: user.id, workerId: booking.workerId, amount: booking.price, gateway: "razorpay" }); const paymentEndpoint = process.env.EXPO_PUBLIC_CREATE_PAYMENT_ORDER_URL; if (!paymentEndpoint) throw new Error("Payment service URL is not configured."); const checkoutUrl = `${paymentEndpoint.replace(/\/createRazorpayOrderHttp\/?$/, "")}/checkout?orderId=${encodeURIComponent(order.orderId)}&keyId=${encodeURIComponent(order.keyId)}&amount=${encodeURIComponent(String(order.amount))}&currency=${encodeURIComponent(order.currency)}&bookingId=${encodeURIComponent(booking.id)}&token=${encodeURIComponent(await (await import("@/lib/gig/firebase")).firebaseAuth!.currentUser!.getIdToken())}`; await WebBrowser.openBrowserAsync(checkoutUrl); markPaid(booking.id); } catch (error) { Alert.alert("Payment unavailable", error instanceof Error ? error.message : "Payment could not be started."); } }} />}
+        {view === "bookings" && <BookingsView createdBooking={createdBooking} liveBookings={liveBookings} selectedWorker={selectedWorker} selectedService={selectedService} availableWorkers={directoryWorkers} onWorker={openWorker} onMessage={(booking) => { setActiveCustomerChat(booking); setView("chat"); }} onCall={(booking) => { void openBookingCall(booking.workerPhone ?? directoryWorkers.find((worker) => worker.userId === booking.workerId)?.phone); }} reviewedBookingIds={reviewedBookingIds} paidBookingIds={paidBookingIds} onReview={(booking) => { setReviewBooking(booking); setView("review"); }} onPay={async (booking) => { try { if (booking.paymentMethod === "cash_on_service") { localizedAlert("Cash payment", "Please pay the worker after the service is completed."); return; } const order = await createPaymentAttempt({ bookingId: booking.id, customerId: user.id, workerId: booking.workerId, amount: booking.price, gateway: "razorpay" }); const paymentEndpoint = process.env.EXPO_PUBLIC_CREATE_PAYMENT_ORDER_URL; if (!paymentEndpoint) throw new Error("Payment service URL is not configured."); const checkoutUrl = `${paymentEndpoint.replace(/\/createRazorpayOrderHttp\/?$/, "")}/checkout?orderId=${encodeURIComponent(order.orderId)}&keyId=${encodeURIComponent(order.keyId)}&amount=${encodeURIComponent(String(order.amount))}&currency=${encodeURIComponent(order.currency)}&bookingId=${encodeURIComponent(booking.id)}&token=${encodeURIComponent(await (await import("@/lib/gig/firebase")).firebaseAuth!.currentUser!.getIdToken())}`; await WebBrowser.openBrowserAsync(checkoutUrl); markPaid(booking.id); } catch (error) { localizedAlert("Payment unavailable", error instanceof Error ? error.message : "Payment could not be started."); } }} />}
         {view === "chat" && activeCustomerChat && <CustomerConversation booking={activeCustomerChat} user={user} onBack={() => setView("bookings")} />}
         {view === "review" && reviewBooking && <ReviewView booking={reviewBooking} onBack={() => setView("bookings")} onSubmit={async (rating, comment) => { await submitReview({ bookingId: reviewBooking.id, customerId: user.id, workerId: reviewBooking.workerId, rating, comment }); markReviewed(reviewBooking.id); setReviewBooking(null); setView("bookings"); }} />}
         {view === "profile" && <ProfileView profile={customerProfile} onProfileChange={setCustomerProfile} onSave={saveCustomerProfile} onSignOut={onSignOut} onExit={() => setView("home")} />}
@@ -313,7 +313,7 @@ function CustomerConversation({ booking, user, onBack }: { booking: Booking; use
     try {
       return subscribeToMessages(booking.id, setMessages);
     } catch (error) {
-      Alert.alert("Chat unavailable", error instanceof Error ? error.message : "Please try again shortly.");
+      localizedAlert("Chat unavailable", error instanceof Error ? error.message : "Please try again shortly.");
       return undefined;
     }
   }, [booking.id]);
@@ -325,7 +325,7 @@ function CustomerConversation({ booking, user, onBack }: { booking: Booking; use
       await sendBookingMessage({ chatId: booking.id, senderId: user.id, receiverId: booking.workerId, message, bookingStatus: booking.status });
       setText("");
     } catch (error) {
-      Alert.alert("Message not sent", error instanceof Error ? error.message : "Please try again.");
+      localizedAlert("Message not sent", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setIsSending(false);
     }
@@ -338,11 +338,11 @@ function ReviewView({ booking, onBack, onSubmit }: { booking: Booking; onBack: (
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submit = async () => {
-    if (!rating) { Alert.alert("Choose a rating", "Select one to five stars before submitting your review."); return; }
+    if (!rating) { localizedAlert("Choose a rating", "Select one to five stars before submitting your review."); return; }
     if (isSubmitting) return;
     setIsSubmitting(true);
     try { await onSubmit(rating as 1 | 2 | 3 | 4 | 5, comment.trim() || undefined); }
-    catch (error) { Alert.alert("Review not submitted", error instanceof Error ? error.message : "Please try again."); }
+    catch (error) { localizedAlert("Review not submitted", error instanceof Error ? error.message : "Please try again."); }
     finally { setIsSubmitting(false); }
   };
   return <><BackLabel label="Rate your service" onPress={onBack} /><View style={styles.reviewHero}><View style={styles.reviewIcon}><MaterialIcons name="star" size={30} color="#D97706" /></View><Text style={styles.reviewTitle}>How was your service with {booking.workerName || "your worker"}?</Text><Text style={styles.reviewCopy}>Your feedback helps cooperative workers build a trusted local reputation.</Text></View><View style={styles.reviewCard}><Text style={styles.fieldLabel}>Your rating</Text><View style={styles.starRow}>{[1, 2, 3, 4, 5].map((star) => <Pressable key={star} onPress={() => setRating(star)} style={({ pressed }) => [styles.starPress, pressed && styles.pressed]}><MaterialIcons name={star <= rating ? "star" : "star-outline"} size={34} color="#D97706" /></Pressable>)}</View><Text style={styles.fieldLabel}>Write a review <Text style={styles.optionalText}>(optional)</Text></Text><TextInput multiline value={comment} onChangeText={setComment} placeholder="Tell us about the service experience." placeholderTextColor="#829AB1" style={styles.reviewInput} /></View><PrimaryButton label={isSubmitting ? "Submitting…" : "Submit review"} icon="send" onPress={() => { void submit(); }} /></>;
@@ -363,7 +363,7 @@ function ProfileView({ profile, onProfileChange, onSave, onSignOut, onExit }: { 
   }, [onExit, section]);
   useEffect(() => {
     if (profile.phone.trim().replace(/\D/g, "").length >= 10) return;
-    Alert.alert(
+    localizedAlert(
       t("Add phone number", "Add phone number"),
       t("Add your phone number to complete your profile and make service coordination easier.", "Add your phone number to complete your profile and make service coordination easier."),
       [
@@ -374,9 +374,9 @@ function ProfileView({ profile, onProfileChange, onSave, onSignOut, onExit }: { 
   }, []);
   if (section !== "menu") {
     const title = section === "details" ? "Personal details" : "Notifications";
-    return <><BackLabel label={title} onPress={() => setSection("menu")} /><View style={styles.profileForm}><Text style={styles.formTitle}>{title}</Text>{section === "details" && <><Text style={styles.fieldLabel}>Full name</Text><TextInput value={profile.name} onChangeText={(value) => update({ name: value })} placeholder="Your full name" placeholderTextColor="#829AB1" style={styles.profileInput} /><Text style={styles.fieldLabel}>Phone number</Text><TextInput value={profile.phone} onChangeText={(value) => update({ phone: value })} placeholder="10-digit mobile number" keyboardType="phone-pad" placeholderTextColor="#829AB1" style={styles.profileInput} /></>}{section === "notifications" && <><Text style={styles.formCopy}>Choose whether to receive booking and service updates on this device.</Text><Pressable onPress={() => update({ notificationsEnabled: !profile.notificationsEnabled })} style={({ pressed }) => [styles.preferenceRow, pressed && styles.pressed]}><View style={styles.flex}><Text style={styles.preferenceTitle}>Booking updates</Text><Text style={styles.preferenceCopy}>Requests, acceptance, job status, and messages</Text></View><MaterialIcons name={profile.notificationsEnabled ? "toggle-on" : "toggle-off"} size={38} color={profile.notificationsEnabled ? "#0F766E" : "#94A3B8"} /></Pressable></>}<PrimaryButton label="Save changes" icon="check" onPress={() => { onSave().then(() => { setSection("menu"); Alert.alert("Profile saved", "Your updates have been saved to your account."); }).catch((error) => Alert.alert("Profile not saved", error instanceof Error ? error.message : "Please try again.")); }} /></View></>;
+    return <><BackLabel label={title} onPress={() => setSection("menu")} /><View style={styles.profileForm}><Text style={styles.formTitle}>{title}</Text>{section === "details" && <><Text style={styles.fieldLabel}>Full name</Text><TextInput value={profile.name} onChangeText={(value) => update({ name: value })} placeholder="Your full name" placeholderTextColor="#829AB1" style={styles.profileInput} /><Text style={styles.fieldLabel}>Phone number</Text><TextInput value={profile.phone} onChangeText={(value) => update({ phone: value })} placeholder="10-digit mobile number" keyboardType="phone-pad" placeholderTextColor="#829AB1" style={styles.profileInput} /></>}{section === "notifications" && <><Text style={styles.formCopy}>Choose whether to receive booking and service updates on this device.</Text><Pressable onPress={() => update({ notificationsEnabled: !profile.notificationsEnabled })} style={({ pressed }) => [styles.preferenceRow, pressed && styles.pressed]}><View style={styles.flex}><Text style={styles.preferenceTitle}>Booking updates</Text><Text style={styles.preferenceCopy}>Requests, acceptance, job status, and messages</Text></View><MaterialIcons name={profile.notificationsEnabled ? "toggle-on" : "toggle-off"} size={38} color={profile.notificationsEnabled ? "#0F766E" : "#94A3B8"} /></Pressable></>}<PrimaryButton label="Save changes" icon="check" onPress={() => { onSave().then(() => { setSection("menu"); localizedAlert("Profile saved", "Your updates have been saved to your account."); }).catch((error) => localizedAlert("Profile not saved", error instanceof Error ? error.message : "Please try again.")); }} /></View></>;
   }
-  return <><View style={styles.screenIntro}><Text style={styles.title}>Your profile</Text><Text style={styles.subtle}>Manage your preferences and account.</Text></View>{profile.phone.trim().replace(/\D/g, "").length < 10 && <Pressable onPress={() => setSection("details")} style={({ pressed }) => [styles.phoneAlertCard, pressed && styles.pressed]}><MaterialIcons name="phone" size={21} color="#B45309" /><View style={styles.flex}><Text style={styles.phoneAlertTitle}>{t("Add phone number", "Add phone number")}</Text><Text style={styles.phoneAlertCopy}>{t("Complete your profile to make service coordination easier.", "Complete your profile to make service coordination easier.")}</Text></View><MaterialIcons name="chevron-right" size={22} color="#B45309" /></Pressable>}<ProfileLanguagePicker /><View style={styles.customerProfile}><View style={styles.avatarLarge}><Text style={styles.avatarText}>{initials(profile.name)}</Text></View><Text style={styles.customerName}>{profile.name}</Text><Text style={styles.customerEmail}>Customer account</Text></View><Pressable onPress={() => setSection("details")} style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}><MaterialIcons name="person-outline" size={21} color="#0F766E" /><Text style={styles.settingsText}>Personal details</Text><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable><Pressable onPress={() => setSection("notifications")} style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}><MaterialIcons name="notifications-none" size={21} color="#0F766E" /><Text style={styles.settingsText}>Notifications</Text><Text style={styles.settingsValue}>{profile.notificationsEnabled ? "On" : "Off"}</Text><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable><Pressable onPress={() => Alert.alert("Help & support", "For booking support, use the chat available after a worker accepts your booking.")} style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}><MaterialIcons name="help-outline" size={21} color="#0F766E" /><Text style={styles.settingsText}>Help & support</Text><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable><AppearanceSetting /><Pressable onPress={onSignOut} style={({ pressed }) => [styles.logOutRow, pressed && styles.pressed]}><MaterialIcons name="logout" size={21} color="#C2410C" /><Text style={styles.logOutText}>Sign out</Text></Pressable></>;
+  return <><View style={styles.screenIntro}><Text style={styles.title}>Your profile</Text><Text style={styles.subtle}>Manage your preferences and account.</Text></View>{profile.phone.trim().replace(/\D/g, "").length < 10 && <Pressable onPress={() => setSection("details")} style={({ pressed }) => [styles.phoneAlertCard, pressed && styles.pressed]}><MaterialIcons name="phone" size={21} color="#B45309" /><View style={styles.flex}><Text style={styles.phoneAlertTitle}>{t("Add phone number", "Add phone number")}</Text><Text style={styles.phoneAlertCopy}>{t("Complete your profile to make service coordination easier.", "Complete your profile to make service coordination easier.")}</Text></View><MaterialIcons name="chevron-right" size={22} color="#B45309" /></Pressable>}<ProfileLanguagePicker /><View style={styles.customerProfile}><View style={styles.avatarLarge}><Text style={styles.avatarText}>{initials(profile.name)}</Text></View><Text style={styles.customerName}>{profile.name}</Text><Text style={styles.customerEmail}>Customer account</Text></View><Pressable onPress={() => setSection("details")} style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}><MaterialIcons name="person-outline" size={21} color="#0F766E" /><Text style={styles.settingsText}>Personal details</Text><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable><Pressable onPress={() => setSection("notifications")} style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}><MaterialIcons name="notifications-none" size={21} color="#0F766E" /><Text style={styles.settingsText}>Notifications</Text><Text style={styles.settingsValue}>{profile.notificationsEnabled ? "On" : "Off"}</Text><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable><Pressable onPress={() => localizedAlert("Help & support", "For booking support, use the chat available after a worker accepts your booking.")} style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}><MaterialIcons name="help-outline" size={21} color="#0F766E" /><Text style={styles.settingsText}>Help & support</Text><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable><AppearanceSetting /><Pressable onPress={onSignOut} style={({ pressed }) => [styles.logOutRow, pressed && styles.pressed]}><MaterialIcons name="logout" size={21} color="#C2410C" /><Text style={styles.logOutText}>Sign out</Text></Pressable></>;
 }
 
 function WorkerCard({ worker, onPress }: { worker: WorkerProfile; onPress: () => void }) {
@@ -387,8 +387,8 @@ function BottomNav({ active, onPress }: { active: string; onPress: (view: Custom
 function SectionHeader({ title, action, onPress }: { title: string; action?: string; onPress?: () => void }) { return <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{title}</Text>{action && <Pressable onPress={onPress} style={({ pressed }) => [styles.sectionAction, pressed && styles.pressed]}><Text style={styles.sectionActionText}>{action}</Text><MaterialIcons name="chevron-right" size={18} color="#0F766E" /></Pressable>}</View>; }
 function BackLabel({ label, onPress }: { label: string; onPress: () => void }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.backLabel, pressed && styles.pressed]}><MaterialIcons name="arrow-back" size={21} color="#102A43" /><Text style={styles.backLabelText}>{label}</Text></Pressable>; }
 function PrimaryButton({ label, icon, onPress, disabled }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; onPress: () => void; disabled?: boolean }) { return <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.primaryButton, disabled && { opacity: 0.62 }, pressed && !disabled && styles.primaryPressed]}><Text style={styles.primaryText}>{label}</Text><MaterialIcons name={icon} size={20} color="#FFFFFF" /></Pressable>; }
-function DisabledAction({ label, icon, disabled }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; disabled: boolean }) { return <Pressable disabled={disabled} onPress={() => Alert.alert(label, "A valid active booking is required before contact is available.")} style={styles.disabledAction}><MaterialIcons name={icon} size={20} color="#94A3B8" /><Text style={styles.disabledText}>{label}</Text></Pressable>; }
-function SelectRow({ icon, label, value, onPress }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string; onPress?: () => void }) { return <Pressable onPress={onPress ?? (() => Alert.alert(label, "Selection controls will be connected to live availability in the Firebase-enabled release."))} style={({ pressed }) => [styles.selectRow, pressed && styles.pressed]}><View style={styles.selectIcon}><MaterialIcons name={icon} size={20} color="#0F766E" /></View><View style={styles.flex}><Text style={styles.selectLabel}>{label}</Text><Text style={styles.selectValue}>{value}</Text></View><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable>; }
+function DisabledAction({ label, icon, disabled }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; disabled: boolean }) { return <Pressable disabled={disabled} onPress={() => localizedAlert(label, "A valid active booking is required before contact is available.")} style={styles.disabledAction}><MaterialIcons name={icon} size={20} color="#94A3B8" /><Text style={styles.disabledText}>{label}</Text></Pressable>; }
+function SelectRow({ icon, label, value, onPress }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string; onPress?: () => void }) { return <Pressable onPress={onPress ?? (() => localizedAlert(label, "Selection controls will be connected to live availability in the Firebase-enabled release."))} style={({ pressed }) => [styles.selectRow, pressed && styles.pressed]}><View style={styles.selectIcon}><MaterialIcons name={icon} size={20} color="#0F766E" /></View><View style={styles.flex}><Text style={styles.selectLabel}>{label}</Text><Text style={styles.selectValue}>{value}</Text></View><MaterialIcons name="chevron-right" size={22} color="#829AB1" /></Pressable>; }
 function InfoRow({ icon, label }: { icon: keyof typeof MaterialIcons.glyphMap; label: string }) { return <View style={styles.infoRow}><MaterialIcons name={icon} size={20} color="#0F766E" /><Text style={styles.infoText}>{label}</Text></View>; }
 function DetailRow({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) { return <View style={styles.detailRow}><Text style={styles.detailLabel}>{label}</Text><Text style={[styles.detailValue, emphasis && styles.detailValueEmphasis]}>{value}</Text></View>; }
 function StatusPill({ status }: { status: BookingStatus }) { const color = status === "completed" ? "#15803D" : status === "pending" ? "#D97706" : "#0F766E"; return <View style={[styles.statusPill, { backgroundColor: `${color}15` }]}><Text style={[styles.statusText, { color }]}>{bookingStatusLabel(status)}</Text></View>; }
@@ -406,7 +406,7 @@ function initials(value: string) { return value.split(" ").slice(0, 2).map((part
 async function openBookingCall(phone?: string) {
   const dialablePhone = phone?.replace(/[^\d+]/g, "") ?? "";
   if (dialablePhone.replace(/\D/g, "").length < 10) {
-    Alert.alert("Phone number unavailable", "This worker has not saved a valid contact number yet. Ask them to add it in their worker profile.");
+    localizedAlert("Phone number unavailable", "This worker has not saved a valid contact number yet. Ask them to add it in their worker profile.");
     return;
   }
   try {
@@ -414,7 +414,7 @@ async function openBookingCall(phone?: string) {
     if (!(await Linking.canOpenURL(url))) throw new Error("No compatible dialer is available.");
     await Linking.openURL(url);
   } catch (error) {
-    Alert.alert("Calling unavailable", error instanceof Error ? error.message : "A compatible phone application is not available on this device.");
+    localizedAlert("Calling unavailable", error instanceof Error ? error.message : "A compatible phone application is not available on this device.");
   }
 }
 

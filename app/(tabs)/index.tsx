@@ -2,7 +2,6 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +18,7 @@ import { AdminOperations, WorkerOperations } from "@/components/gig/operations";
 import { useGigSession } from "@/lib/gig/session-context";
 import type { AppUser, UserRole } from "@/lib/gig/models";
 import { PUBLIC_REGISTRATION_ROLES } from "@/lib/gig/registration";
-import { LocalizedText, LocalizedTextInput, useI18n } from "@/lib/i18n";
+import { LocalizedText, LocalizedTextInput, localizedAlert, useI18n } from "@/lib/i18n";
 
 type AuthMode = "welcome" | "login" | "register";
 const Text = LocalizedText;
@@ -54,17 +53,17 @@ export default function HomeScreen() {
 
   const submit = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Complete your details", "Enter your email address and password to continue.");
+      localizedAlert("Complete your details", "Enter your email address and password to continue.");
       return;
     }
     if (mode === "register" && !name.trim()) {
-      Alert.alert("Tell us your name", "Add your name so customers and workers can recognise you.");
+      localizedAlert("Tell us your name", "Add your name so customers and workers can recognise you.");
       return;
     }
     try {
       await signIn({ name, email, password, role: adminMode ? "admin" : selectedRole, isNew: mode === "register" });
     } catch (error) {
-      Alert.alert("Account action could not be completed", error instanceof Error ? error.message : "Please review the details and try again.");
+      localizedAlert("Account action could not be completed", error instanceof Error ? error.message : "Please review the details and try again.");
     }
   };
 
@@ -124,14 +123,14 @@ export default function HomeScreen() {
             <LabeledInput label={t("password")} placeholder={t("enterPassword")} value={password} onChangeText={setPassword} icon="lock-outline" secureTextEntry />
             {!isRegister && (
               <Pressable onPress={async () => {
-                if (!email.trim()) { Alert.alert("Enter your email", "Add your registered email address first, then try again."); return; }
-                try { const sent = await resetPassword(email); Alert.alert("Password recovery", sent ? "A password-reset email has been sent." : "Firebase needs to be enabled before password reset is available."); } catch (error) { Alert.alert("Password recovery failed", error instanceof Error ? error.message : "Please try again."); }
+                if (!email.trim()) { localizedAlert("Enter your email", "Add your registered email address first, then try again."); return; }
+                try { const sent = await resetPassword(email); localizedAlert("Password recovery", sent ? "A password-reset email has been sent." : "Firebase needs to be enabled before password reset is available."); } catch (error) { localizedAlert("Password recovery failed", error instanceof Error ? error.message : "Please try again."); }
               }} style={({ pressed }) => [styles.forgotLink, pressed && styles.pressed]}>
                 <Text style={styles.forgotText}>{t("forgotPassword")}</Text>
               </Pressable>
             )}
             <PrimaryButton label={isRegister ? t("createAccount") : adminMode ? "Enter admin dashboard" : t("signIn")} onPress={submit} />
-            {!adminMode && <Pressable onPress={() => { void signInWithGoogle().catch((error) => Alert.alert("Google sign-in failed", error instanceof Error ? error.message : "Please try again.")); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}>
+            {!adminMode && <Pressable onPress={() => { void signInWithGoogle().catch((error) => localizedAlert("Google sign-in failed", error instanceof Error ? error.message : "Please try again.")); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}>
               <Text style={styles.googleIcon}>G</Text>
               <Text style={styles.googleButtonText}>{t("continueWithGoogle")}</Text>
             </Pressable>}
